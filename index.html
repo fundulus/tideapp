@@ -661,17 +661,30 @@ const NOAAProvider = {
   _info: {},
   async getStationInfo(stationId) {
     if (this._info[stationId]) return this._info[stationId];
-    let stdOffset = -8; // safe default; overwritten below
+    // NOAA's prediction list carries foreign stations too, and their details endpoint
+    // 404s. A fixed default put those on a US clock, hours out: La Paz came out on
+    // Pacific time with US daylight saving, when Baja California Sur is UTC-7 and
+    // Mexico dropped DST in 2022. The station's own longitude is a much better guess,
+    // since that is how zones are laid out to first order.
+    const known = (this._stations || []).find(s => s.id === stationId) ||
+                  (state.station && state.station.id === stationId ? state.station : null);
+    const lng = known && typeof known.lng === "number" ? known.lng : -120;
+    let stdOffset = Math.round(lng / 15);
+    let fromApi = false;
     try {
       const r = await fetch("https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/" +
         encodeURIComponent(stationId) + "/details.json");
       const d = await r.json();
-      if (typeof d.timezone === "number") stdOffset = d.timezone;
-      else if (typeof d.timemeridian === "number") stdOffset = Math.round(d.timemeridian / 15);
-    } catch (e) { /* fall back to default */ }
+      if (typeof d.timezone === "number") { stdOffset = d.timezone; fromApi = true; }
+      else if (typeof d.timemeridian === "number") { stdOffset = Math.round(d.timemeridian / 15); fromApi = true; }
+    } catch (e) { /* keep the longitude estimate */ }
     // Eastern/Central/Pacific/Alaska observe DST; Hawaii, Atlantic (PR/VI), Guam, Samoa do not.
-    const observesDST = [-9, -8, -6, -5].includes(Math.round(stdOffset));
-    return (this._info[stationId] = { stdOffset, observesDST });
+    // Only apply US rules to a station we have reason to believe is US: one NOAA answered
+    // for, or one carrying a US state code. Elsewhere the rules and the dates differ, and
+    // guessing wrong shifts half the year by an hour.
+    const looksUS = fromApi || !!(known && known.state);
+    const observesDST = looksUS && [-9, -8, -6, -5].includes(Math.round(stdOffset));
+    return (this._info[stationId] = { stdOffset, observesDST, estimated: !fromApi });
   }
 };
 
