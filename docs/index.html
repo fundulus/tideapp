@@ -114,6 +114,11 @@
     white-space: nowrap;
   }
   .btn:hover { background: rgba(255,255,255,.22); }
+  /* Icon buttons in the header. The glyph carries the meaning, so it gets the room:
+     an emoji at body size read as an afterthought next to the search field. */
+  .btn.iconbtn { padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; }
+  .btn.iconbtn svg { width: 27px; height: 27px; display: block; }
+  #locbtn { font-size: 19px; padding: 0 11px; }
 
   /* Favorites: star toggle plus a caret that opens the saved list. */
   .favwrap { position: relative; flex: 0 0 auto; }
@@ -465,7 +470,34 @@
       <input id="search" type="text" autocomplete="off" spellcheck="false"
              placeholder="Search a station, or paste coordinates (e.g. 32.85, -117.26)…" />
       <button class="btn" id="locbtn" title="Use my location">📍</button>
-      <button class="btn" id="mapbtn" title="Choose from a map">🗺️</button>
+      <button class="btn iconbtn" id="mapbtn" title="Choose from a map" aria-label="Choose from a map">
+        <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="mpGlobe" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#8CC0D8"/><stop offset="1" stop-color="#BCDBE5"/>
+            </linearGradient>
+            <linearGradient id="mpPin" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#EE6B4D"/><stop offset="1" stop-color="#D6432A"/>
+            </linearGradient>
+          </defs>
+          <circle cx="24" cy="24" r="22" fill="url(#mpGlobe)" stroke="#22546F" stroke-width="2.4"/>
+          <!-- Land, clipped to the globe. Angular rather than rounded: soft blobs read as
+               cloud at this size, and at 27 px these blur into texture, which is the job. -->
+          <clipPath id="mpClip"><circle cx="24" cy="24" r="21"/></clipPath>
+          <g fill="#E4F2F8" clip-path="url(#mpClip)">
+            <path d="M2,14 L10,11 L15,15 L13,21 L16,25 L12,31 L6,29 L3,23 Z"/>
+            <path d="M9,36 L15,33 L20,37 L19,44 L13,46 L8,42 Z"/>
+            <path d="M33,8 L41,10 L45,16 L43,24 L37,26 L33,21 L35,15 Z"/>
+            <path d="M38,32 L46,31 L47,38 L41,41 L37,37 Z"/>
+          </g>
+          <ellipse cx="24" cy="38.5" rx="9.5" ry="3.2" fill="#79B2CB" stroke="#EAF6FA" stroke-width="1.7"/>
+          <path d="M24,40.5 C24,40.5 34.5,27.5 34.5,20.5 A10.5,10.5 0 1 0 13.5,20.5 C13.5,27.5 24,40.5 24,40.5 Z"
+                fill="url(#mpPin)" stroke="#22546F" stroke-width="2.4" stroke-linejoin="round"/>
+          <circle cx="24" cy="20" r="7" fill="#F4FAFC" stroke="#22546F" stroke-width="1.9"/>
+          <path d="M18.6,22.6 q.6,-5 5.2,-4.6 q3.6,.3 3.2,3.3 q-.3,2.4 -2.6,2 q-1.7,-.3 -1.2,-1.8"
+                fill="none" stroke="#2A7C96" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
     <div class="results" id="results"></div>
   </div>
@@ -516,6 +548,11 @@
     <p>Predictions come live from the <b>NOAA CO-OPS</b> API, covering all US coasts plus Alaska,
     Hawaii, the territories and the Great Lakes. Heights are relative to <b>MLLW</b> (mean lower
     low water). These are NOAA's own published predictions, not a model of them.</p>
+    <p>Many smaller sites are <b>subordinate stations</b>: NOAA predicts them from a nearby
+    reference station and publishes only their highs and lows, with no continuous curve.
+    For those the times and heights shown are still NOAA's exactly, but the curve drawn
+    between them is this app's, a smooth interpolation that passes through every published
+    turning point and arrives flat at each.</p>
 
     <h3>Mexican stations</h3>
     <p><b>These four sites work differently, and it is worth knowing how.</b> Bahía de los Ángeles,
@@ -975,6 +1012,47 @@ const OfflineUS = {
   }
 };
 
+/* NOAA publishes no 6-minute series for subordinate stations, only their highs and
+   lows, so the day chart for one of those would otherwise be straight lines between
+   turning points. Fill it in with the same half cosine used for the offline subordinate
+   sites: it passes through every published extremum exactly and arrives flat at each,
+   which is the shape a tide curve genuinely has there. The published highs and lows are
+   untouched; only the curve between them is drawn. */
+function curveThroughExtrema(hilo, begin, end, step) {
+  if (hilo.length < 2) return [];
+  const mk = (y, m, d) => new Date(+y, +m - 1, +d);
+  const d0 = mk(begin.slice(0,4), begin.slice(4,6), begin.slice(6,8));
+  const d1 = mk(end.slice(0,4),   end.slice(4,6),   end.slice(6,8));
+  const nDays = Math.round((d1 - d0)/86400000) + 1;
+
+  const ext = hilo.map(p => ({ t: p.time.getTime(), h: p.height })).sort((a, b) => a.t - b.t);
+  // The requested range starts and ends part way between turning points, so continue the
+  // pattern one half cycle past each end rather than running flat off the edge.
+  const f0 = ext[0], f1 = ext[1];
+  ext.unshift({ t: f0.t - (f1.t - f0.t), h: f1.h });
+  const l1 = ext[ext.length-1], l0 = ext[ext.length-2];
+  ext.push({ t: l1.t + (l1.t - l0.t), h: l0.h });
+
+  let k = 0;
+  const at = tms => {
+    while (k < ext.length - 2 && ext[k+1].t <= tms) k++;
+    const A = ext[k], B = ext[k+1];
+    if (tms <= A.t) return A.h;
+    if (tms >= B.t) return B.h;
+    const x = (tms - A.t)/(B.t - A.t);
+    return (A.h + B.h)/2 + (A.h - B.h)/2 * Math.cos(Math.PI * x);
+  };
+  const out = [];
+  for (let dn = 0; dn < nDays; dn++) {
+    const day = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + dn);
+    for (let i = 0; i < 1440; i += step) {
+      const t = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, i);
+      out.push({ time: t, height: at(t.getTime()) });
+    }
+  }
+  return out;
+}
+
 /* Routes each station to its source. NOAA ids are numeric; harmonic ids carry an
    "mx-" prefix. Both honour the same interface, so nothing downstream changes.
    NOAA stays the source of truth whenever it is reachable, so the numbers match
@@ -988,10 +1066,15 @@ const provider = {
     const offline = noaa.length ? [] : OfflineUS.stationList();
     return HarmonicProvider.stationList().concat(offline, noaa);
   },
-  async getPredictions(id, b, e, units, opts) {
+  async getPredictions(id, b, e, units, opts = {}) {
     if (String(id).startsWith("mx-")) return HarmonicProvider.getPredictions(id, b, e, units, opts);
     try {
-      return await NOAAProvider.getPredictions(id, b, e, units, opts);
+      const r = await NOAAProvider.getPredictions(id, b, e, units, opts);
+      if (opts.series !== false && r.series.length === 0 && r.hilo.length >= 2) {
+        r.series = curveThroughExtrema(r.hilo, b, e, opts.interval === "h" ? 60 : 6);
+        r.interpolated = true;      // a subordinate station: NOAA gave hi/lo only
+      }
+      return r;
     } catch (err) {
       if (OfflineUS.has(id)) return OfflineUS.getPredictions(id, b, e, units, opts);
       throw err;
