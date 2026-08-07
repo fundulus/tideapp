@@ -244,6 +244,22 @@
     font-size: 16px; line-height: 1; padding: 8px 11px; cursor: pointer;
   }
   .elevbox .stepbtn:hover { background: #e3ebe2; }
+  /* The night weight sits with the monthly table it affects rather than in the main
+     control bar, which is already carrying elevation, focus, range and date nav. */
+  .monthhead {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 14px; flex-wrap: wrap; margin: 0 0 10px;
+  }
+  .monthhead .mtitle { font-size: 15px; font-weight: 700; color: var(--teal); }
+  .nightw { font-size: 12.5px; color: var(--label); display: inline-flex; align-items: center; gap: 6px; }
+  .nightw input {
+    width: 56px; border: 1px solid var(--line); border-radius: 8px; background: var(--card);
+    font-family: inherit; font-size: 13px; font-weight: 700; color: var(--teal);
+    text-align: right; padding: 5px 7px; -moz-appearance: textfield;
+  }
+  .nightw input::-webkit-outer-spin-button, .nightw input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .tides th .thsub { font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10px; opacity: .8; }
+
   .tablescroll { max-height: 420px; overflow-y: auto; }
   .tablescroll thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
   .csvbtn {
@@ -770,6 +786,9 @@ const state = {
   elevM: parseFloat(localStorage.getItem("tide.elevM") || "0.64"),   // ~2.1 ft
   range: localStorage.getItem("tide.range") || "1mo",
   focus: localStorage.getItem("tide.focus") || "sub",   // 'sub' inundated, 'exp' exposed
+  // Fraction of a night hour that counts as usable. 1 means darkness is as good as
+  // daylight; 0 means only daylight counts. Anything between weights the two.
+  nightWeight: Math.min(1, Math.max(0, parseFloat(localStorage.getItem("tide.nightWeight") ?? "1"))),
   rangeStart: null               // set at boot from the chosen range
 };
 
@@ -1848,11 +1867,29 @@ function computeInundation(series, thr, st, info) {
 
   function newRec(t) {
     return { key: ymd(t), date: new Date(t), expMs: 0, expDayMs: 0, subMs: 0, subDayMs: 0,
-             expEvents: 0, subEvents: 0, longestExpMs: 0, longestSubMs: 0 };
+             expEvents: 0, subEvents: 0, longestExpMs: 0, longestSubMs: 0,
+             longestSubGapMs: 0, longestExpGapMs: 0 };
   }
+  // Runs during which the focused state is NOT available in daylight. The longest of
+  // these is the maximum stretch an organism that can only use the shore in daylight
+  // would go without access, which bears on condition in a way totals do not.
+  const gapRuns = { sub: [], exp: [] };
+  const gapOpen = { sub: null, exp: null };
+  function markAvail(which, t, available) {
+    if (available) {
+      if (gapOpen[which] !== null) {
+        gapRuns[which].push({ start: gapOpen[which], end: t, ms: t - gapOpen[which] });
+        gapOpen[which] = null;
+      }
+    } else if (gapOpen[which] === null) {
+      gapOpen[which] = t;
+    }
+  }
+
   function bucket(a, b, submerged) {
     if (b <= a) return;
-    const dayMs = overlap(a, b, dayWindow(new Date(a)));
+    const win = dayWindow(new Date(a));
+    const dayMs = overlap(a, b, win);
     const dur = b - a;
     if (submerged) { subMs += dur; subDayMs += dayMs; }
     else { expMs += dur; expDayMs += dayMs; }
@@ -1861,6 +1898,23 @@ function computeInundation(series, thr, st, info) {
     if (!rec) { rec = newRec(new Date(a)); perDay.set(key, rec); }
     if (submerged) { rec.subMs += dur; rec.subDayMs += dayMs; }
     else { rec.expMs += dur; rec.expDayMs += dayMs; }
+
+    // Daylight access flips at sunrise and sunset as well as at the threshold, so the
+    // interval is cut there too before availability is marked.
+    const cuts = [a];
+    if (win) {
+      if (win[0] > a && win[0] < b) cuts.push(win[0]);
+      if (win[1] > a && win[1] < b) cuts.push(win[1]);
+    }
+    cuts.push(b);
+    cuts.sort((x, y) => x - y);
+    for (let k = 0; k < cuts.length - 1; k++) {
+      const s0 = cuts[k], s1 = cuts[k + 1];
+      if (s1 <= s0) continue;
+      const isDay = win ? (s0 >= win[0] && s1 <= win[1]) : false;
+      markAvail("sub", s0, submerged && isDay);
+      markAvail("exp", s0, !submerged && isDay);
+    }
   }
   function mark(t, submerged) {
     if (cur && cur.submerged === submerged) return;
@@ -1889,6 +1943,24 @@ function computeInundation(series, thr, st, info) {
     const last = times[times.length - 1].getTime();
     runs[cur.submerged ? "sub" : "exp"].push({ start: cur.start, end: last, ms: last - cur.start, open: true });
   }
+  // A gap still open at the end of the range is left-truncated by the window rather
+  // than by the tide, so it is flagged and excluded from "longest" figures.
+  for (const which of ["sub", "exp"]) {
+    if (gapOpen[which] !== null) {
+      const last = times[times.length - 1].getTime();
+      gapRuns[which].push({ start: gapOpen[which], end: last, ms: last - gapOpen[which], open: true });
+    }
+    for (const g of gapRuns[which]) {
+      if (g.open) continue;
+      let d = new Date(g.start); d.setHours(0, 0, 0, 0);
+      const field = which === "sub" ? "longestSubGapMs" : "longestExpGapMs";
+      while (d.getTime() <= g.end) {
+        const rec = perDay.get(ymd(d));
+        if (rec) rec[field] = Math.max(rec[field], g.ms);
+        d = addDays(d, 1);
+      }
+    }
+  }
   for (const which of ["sub", "exp"]) {
     for (const ev of runs[which]) {
       // Count each window once, on the day it begins, so totals do not double count.
@@ -1913,6 +1985,9 @@ function computeInundation(series, thr, st, info) {
     expDayMs, expNightMs: expMs - expDayMs,
     subRuns: runs.sub, expRuns: runs.exp,
     longestSub: pick(runs.sub), longestExp: pick(runs.exp),
+    subGaps: gapRuns.sub, expGaps: gapRuns.exp,
+    longestSubGap: pick(gapRuns.sub.filter(g => !g.open)),
+    longestExpGap: pick(gapRuns.exp.filter(g => !g.open)),
     perDay: [...perDay.values()].sort((a, b) => a.date - b.date)
   };
 }
@@ -1982,7 +2057,7 @@ async function renderInundation() {
     ? '<div class="card"><div class="chartwrap">' + inundCurve(series, thr, res, st, info, begin, nDays) + "</div></div>"
     : '<div class="card"><div class="chartwrap">' + inundBars(res) + "</div></div>";
 
-  content.innerHTML = cards + chart + inundTable(res) + `
+  content.innerHTML = cards + chart + inundMonthly(res) + inundTable(res) + `
     <div class="calnote">
       ${F.noun} means the predicted water level is ${state.focus === "exp" ? "below" : "at or above"}
       ${thr.toFixed(state.units==="metric"?2:1)} ${u} above ${datumName()}.
@@ -1991,6 +2066,14 @@ async function renderInundation() {
     </div>`;
   const cb = document.getElementById("csvBtn");
   if (cb) cb.onclick = exportInundCSV;
+  const nw = document.getElementById("nightWeight");
+  if (nw) nw.onchange = () => {
+    const v = parseFloat(nw.value);
+    if (isNaN(v)) return;
+    state.nightWeight = Math.min(1, Math.max(0, v / 100));
+    localStorage.setItem("tide.nightWeight", String(state.nightWeight));
+    render();
+  };
 }
 
 // Vocabulary and figures for whichever side of the waterline the user is focused on.
@@ -2116,6 +2199,75 @@ function inundBars(res) {
   </svg>`;
 }
 
+/* Rolls the per-day figures up by calendar month. This is the seasonal view: at a
+   fixed shore elevation the total time wet barely changes through the year, but how
+   much of it falls in daylight swings enormously at a mixed-tide site and hardly at
+   all at a semidiurnal one. */
+function monthlyRollup(res) {
+  const m = new Map();
+  for (const d of res.perDay) {
+    const k = d.date.getFullYear() + "-" + String(d.date.getMonth() + 1).padStart(2, "0");
+    let r = m.get(k);
+    if (!r) {
+      r = { key: k, date: new Date(d.date.getFullYear(), d.date.getMonth(), 1), days: 0,
+            subMs: 0, subDayMs: 0, expMs: 0, expDayMs: 0,
+            longestSubGapMs: 0, longestExpGapMs: 0 };
+      m.set(k, r);
+    }
+    r.days++;
+    r.subMs += d.subMs; r.subDayMs += d.subDayMs;
+    r.expMs += d.expMs; r.expDayMs += d.expDayMs;
+    r.longestSubGapMs = Math.max(r.longestSubGapMs, d.longestSubGapMs);
+    r.longestExpGapMs = Math.max(r.longestExpGapMs, d.longestExpGapMs);
+  }
+  return [...m.values()].sort((a, b) => a.date - b.date);
+}
+
+function inundMonthly(res) {
+  const months = monthlyRollup(res);
+  if (months.length < 2) return "";          // a single month is what the day table is for
+  const sub = state.focus !== "exp";
+  const noun = sub ? "Inundated" : "Exposed";
+  const w = state.nightWeight;
+  const weighted = w < 0.999;
+
+  const rows = months.map(mo => {
+    const tot = sub ? mo.subMs : mo.expMs;
+    const day = sub ? mo.subDayMs : mo.expDayMs;
+    const night = tot - day;
+    const gap = sub ? mo.longestSubGapMs : mo.longestExpGapMs;
+    const pct = tot > 0 ? (100 * day / tot).toFixed(1) + "%" : "–";
+    const eff = day + w * night;
+    return `<tr>
+      <td>${mo.date.toLocaleDateString(undefined, { month: "short", year: "numeric" })}</td>
+      <td class="h">${fmtSpan(tot)}</td>
+      <td class="h">${fmtSpan(day)}</td>
+      <td class="h">${fmtSpan(night)}</td>
+      <td class="h">${pct}</td>
+      ${weighted ? `<td class="h"><b>${fmtSpan(eff)}</b></td>` : ""}
+      <td class="h">${gap ? fmtSpan(gap) : "–"}</td>
+    </tr>`;
+  }).join("");
+
+  return `<div class="card">
+    <div class="monthhead">
+      <span class="mtitle">Month by month</span>
+      <label class="nightw">night counts as
+        <input id="nightWeight" type="number" min="0" max="100" step="5"
+               value="${Math.round(w * 100)}" /> %
+      </label>
+    </div>
+    <div class="tablescroll"><table class="tides">
+      <thead><tr>
+        <th>Month</th><th>${noun}</th><th>Daylight</th><th>Night</th><th>% daylight</th>
+        ${weighted ? "<th>Effective</th>" : ""}
+        <th>Longest gap<br><span class="thsub">no daylight access</span></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+
 function inundTable(res) {
   const sub = state.focus !== "exp";
   const noun = sub ? "Inundated" : "Exposed";
@@ -2160,15 +2312,42 @@ function exportInundCSV() {
   L.push("# total_exposed_h," + (res.expMs/3600000).toFixed(3));
   L.push("# exposed_daylight_h," + (res.expDayMs/3600000).toFixed(3));
   L.push("# exposed_night_h," + (res.expNightMs/3600000).toFixed(3));
+  L.push("# night_weight," + state.nightWeight.toFixed(3) + ",fraction of a night hour counted as usable");
   L.push("# events columns count windows beginning that day; longest_*_h is the longest");
   L.push("# window touching that day, at full length even if it began the day before");
+  L.push("# longest_*_gap_h is the longest stretch with NO daylight access to that state");
+
+  // Monthly block first: this is the seasonal comparison the per-day rows are too
+  // granular to show, and it is what a manuscript table would actually cite.
+  const months = monthlyRollup(res);
+  if (months.length > 1) {
+    L.push("");
+    L.push("# --- monthly summary ---");
+    L.push("month,days,inundated_h,inundated_daylight_h,inundated_night_h,inundated_effective_h," +
+           "exposed_h,exposed_daylight_h,exposed_night_h,exposed_effective_h," +
+           "longest_inundation_gap_h,longest_exposure_gap_h");
+    const w = state.nightWeight;
+    for (const mo of months) {
+      const hr = ms => (ms/3600000).toFixed(3);
+      L.push([mo.key, mo.days,
+        hr(mo.subMs), hr(mo.subDayMs), hr(mo.subMs - mo.subDayMs),
+        hr(mo.subDayMs + w * (mo.subMs - mo.subDayMs)),
+        hr(mo.expMs), hr(mo.expDayMs), hr(mo.expMs - mo.expDayMs),
+        hr(mo.expDayMs + w * (mo.expMs - mo.expDayMs)),
+        hr(mo.longestSubGapMs), hr(mo.longestExpGapMs)].join(","));
+    }
+    L.push("");
+    L.push("# --- daily detail ---");
+  }
   L.push("date,inundated_h,inundated_daylight_h,inundated_night_h,inundation_events,longest_inundation_h," +
-         "exposed_h,exposed_daylight_h,exposed_night_h,exposure_events,longest_exposure_h");
+         "exposed_h,exposed_daylight_h,exposed_night_h,exposure_events,longest_exposure_h," +
+         "longest_inundation_gap_h,longest_exposure_gap_h");
   const hr = ms => (ms/3600000).toFixed(3);
   for (const d of res.perDay) {
     L.push([ymd(d.date).replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3"),
       hr(d.subMs), hr(d.subDayMs), hr(d.subMs - d.subDayMs), d.subEvents, hr(d.longestSubMs),
-      hr(d.expMs), hr(d.expDayMs), hr(d.expMs - d.expDayMs), d.expEvents, hr(d.longestExpMs)].join(","));
+      hr(d.expMs), hr(d.expDayMs), hr(d.expMs - d.expDayMs), d.expEvents, hr(d.longestExpMs),
+      hr(d.longestSubGapMs), hr(d.longestExpGapMs)].join(","));
   }
   const blob = new Blob([L.join("\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
