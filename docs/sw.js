@@ -8,7 +8,7 @@
 //
 // Bump CACHE_VERSION on every deploy; the old caches are dropped on activate.
 
-const CACHE_VERSION = "tides-20260807080733";
+const CACHE_VERSION = "tides-20260807120721";
 const SHELL_CACHE = CACHE_VERSION + "-shell";
 const DATA_CACHE = CACHE_VERSION + "-noaa";
 
