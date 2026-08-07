@@ -1,0 +1,2440 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Tides</title>
+<!-- Progressive web app: lets Windows, Android and ChromeOS install this as a real
+     app with offline support. Harmless in the native macOS and iOS shells, which
+     load the page over a custom scheme where none of it applies. -->
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#2D555F" />
+<meta name="description" content="Tide predictions for US coastal stations and four Baja California sites." />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Tides" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<style>
+  :root {
+    --teal: #2D555F;
+    --teal-dark: #1f3d45;
+    --sage: #82A08C;
+    --amber: #BE7828;
+    /* Darker amber for small text. The display amber is only 3.6:1 on white, which
+       fails at 11px; this clears 4.5:1 while reading as the same colour. */
+    --amber-text: #A56823;
+    /* Small labels on white. The old #8a9791 was only 3.0:1, which is why chart
+       tide heights were hard to read at 10px. */
+    --label: #6d7773;
+    --lowneg: #1668B8;   /* negative low tides; distinct from the amber used for highs */
+    --paper: #F8F8F5;
+    --ink: #23312f;
+    --muted: #6d7d78;
+    --line: #dfe3dd;
+    --card: #ffffff;
+    --shadow: 0 1px 3px rgba(31,61,69,.08), 0 8px 24px rgba(31,61,69,.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Avenir Next", "Avenir", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.45;
+  }
+  a { color: var(--teal); }
+
+  header.appbar {
+    background: var(--teal);
+    color: var(--paper);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    box-shadow: 0 2px 10px rgba(31,61,69,.18);
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; flex: 0 0 auto; }
+  .brand h1 { font-size: 20px; font-weight: 800; letter-spacing: .5px; margin: 0; }
+  .brand .sub { font-size: 12px; color: #cfe0dd; font-weight: 400; }
+
+  .searchwrap { position: relative; flex: 1 1 auto; max-width: 560px; min-width: 0; }
+  .searchrow { display: flex; gap: 8px; }
+  #search {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.25);
+    background: rgba(255,255,255,.12);
+    color: var(--paper);
+    font-size: 15px;
+    font-family: inherit;
+  }
+  #search::placeholder { color: #cfe0dd; }
+  #search:focus { outline: none; background: rgba(255,255,255,.2); border-color: var(--amber); }
+  .btn {
+    border: 1px solid rgba(255,255,255,.25);
+    background: rgba(255,255,255,.12);
+    color: var(--paper);
+    border-radius: 10px;
+    padding: 0 12px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:hover { background: rgba(255,255,255,.22); }
+
+  /* Favorites: star toggle plus a caret that opens the saved list. */
+  .favwrap { position: relative; flex: 0 0 auto; }
+  .favgroup { display: inline-flex; border: 1px solid rgba(255,255,255,.25); border-radius: 10px; overflow: hidden; }
+  .favgroup button {
+    border: none; background: rgba(255,255,255,.12); color: var(--paper);
+    font-family: inherit; font-size: 15px; padding: 10px 11px; cursor: pointer; line-height: 1;
+  }
+  .favgroup button + button { border-left: 1px solid rgba(255,255,255,.25); padding-left: 9px; padding-right: 9px; font-size: 13px; }
+  .favgroup button:hover:not(:disabled) { background: rgba(255,255,255,.22); }
+  .favgroup button:disabled { opacity: .45; cursor: default; }
+  .favgroup button.on { color: var(--amber); background: rgba(255,255,255,.2); }
+  .favcount {
+    display: inline-block; min-width: 15px; height: 15px; line-height: 15px; margin-left: 5px;
+    border-radius: 999px; background: var(--amber); color: #fff; font-size: 10px; font-weight: 700; text-align: center;
+  }
+
+  .favmenu {
+    position: absolute; top: calc(100% + 6px); right: 0;
+    background: var(--card); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+    min-width: 280px; max-height: 340px; overflow-y: auto; display: none; z-index: 40;
+  }
+  .favmenu.show { display: block; }
+  .favmenu .favhead {
+    padding: 9px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--line);
+  }
+  .favmenu .favitem {
+    display: flex; align-items: center; gap: 8px; padding: 9px 8px 9px 14px;
+    cursor: pointer; border-bottom: 1px solid var(--line);
+  }
+  .favmenu .favitem:last-child { border-bottom: none; }
+  .favmenu .favitem:hover { background: #f0f4ef; }
+  .favmenu .favitem.current { background: #f0f4ef; }
+  .favmenu .favitem .fnm { flex: 1 1 auto; font-size: 14px; font-weight: 600; }
+  .favmenu .favitem .fmeta { font-size: 11px; color: var(--muted); font-weight: 400; display: block; margin-top: 1px; }
+  .favmenu .favitem .fdel {
+    flex: 0 0 auto; border: none; background: transparent; color: var(--muted);
+    font-size: 15px; cursor: pointer; padding: 2px 7px; border-radius: 6px; font-family: inherit;
+  }
+  .favmenu .favitem .fdel:hover { background: rgba(162,59,47,.12); color: #a23b2f; }
+  .favmenu .favempty { padding: 16px 14px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+  .results {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0; right: 0;
+    background: var(--card);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    max-height: 340px;
+    overflow-y: auto;
+    display: none;
+    z-index: 40;
+  }
+  .results.show { display: block; }
+  .result {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .result:last-child { border-bottom: none; }
+  .result:hover, .result.active { background: #f0f4ef; }
+  .result .nm { font-weight: 600; }
+  .result .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .result .hint { padding: 12px 14px; color: var(--muted); font-size: 13px; }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 22px 18px 60px; }
+
+  .stationhead {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 16px;
+  }
+  .stationhead .name { font-size: 26px; font-weight: 800; color: var(--teal); line-height: 1.15; }
+  .stationhead .coords { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+  .controlbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin-bottom: 16px;
+  }
+  .controlbar .left, .controlbar .right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--card); }
+  .seg button {
+    border: none; background: transparent; padding: 7px 12px; font-size: 13px; cursor: pointer;
+    font-family: inherit; color: var(--muted); border-left: 1px solid var(--line);
+  }
+  .seg button:first-child { border-left: none; }
+  .seg button.on { background: var(--teal); color: #fff; font-weight: 600; }
+  .seglabel { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 18px 20px;
+    margin-bottom: 18px;
+  }
+
+  .nextgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .nextcard { border-radius: 12px; padding: 14px 16px; background: #f3f6f2; border: 1px solid var(--line); }
+  .nextcard.hero { background: linear-gradient(135deg, var(--teal), var(--teal-dark)); color: #fff; border: none; }
+  .nextcard .lab { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: .8; }
+  .nextcard .big { font-size: 24px; font-weight: 800; margin-top: 3px; }
+  /* The range reads as one unit ("-0.18 -> 1.52 m"), so it must not wrap; scale it
+     with the viewport instead so it never overflows a narrow card either. */
+  .nextcard .big.range { font-size: clamp(14px, 1.35vw, 19px); white-space: nowrap; }
+  /* The range sits alongside the per-tide cards, so give it a quiet tint to read as
+     a summary of them rather than as another tide event. */
+  .nextcard.rangecard { background: #eef2ee; border-color: #dbe3da; }
+  .nextcard .small { font-size: 13px; opacity: .85; margin-top: 2px; }
+  .pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .5px; }
+  .pill.high { background: rgba(190,120,40,.15); color: var(--amber); }
+  .pill.low  { background: rgba(45,85,95,.12); color: var(--teal); }
+
+  .datenav { display: flex; align-items: center; gap: 10px; }
+  .datenav .day { font-weight: 700; font-size: 15px; min-width: 150px; text-align: center; }
+  .navbtn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); cursor: pointer; font-size: 18px; color: var(--teal); }
+  .navbtn:hover { background: #f0f4ef; }
+  .todaybtn { font-size: 13px; padding: 8px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--card); cursor: pointer; color: var(--teal); font-family: inherit; }
+
+  /* Advisory, not an error: the times shown are correct, a printed CICESE table
+     for these dates is the thing that will disagree. */
+  .card.caution {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 13px 16px; font-size: 13.5px; line-height: 1.5; color: var(--ink);
+    background: #fdf6ec; border-color: #e8d3b4;
+  }
+  .card.caution b { color: var(--amber); }
+  .card.caution .cico {
+    flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--amber); color: #fff; font-weight: 800; font-size: 13px;
+    display: flex; align-items: center; justify-content: center; margin-top: 1px;
+  }
+
+  /* Inundation view controls */
+  .elevbox { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 9px; background: var(--card); overflow: hidden; }
+  .elevbox input {
+    width: 68px; border: none; outline: none; font-family: inherit; font-size: 15px; font-weight: 700;
+    color: var(--teal); text-align: right; padding: 7px 2px 7px 8px; background: transparent;
+    -moz-appearance: textfield;
+  }
+  .elevbox input::-webkit-outer-spin-button, .elevbox input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .elevbox .eunit { font-size: 13px; color: var(--muted); padding-right: 8px; }
+  .elevbox .stepbtn {
+    border: none; background: #f0f4ef; color: var(--teal); font-family: inherit;
+    font-size: 16px; line-height: 1; padding: 8px 11px; cursor: pointer;
+  }
+  .elevbox .stepbtn:hover { background: #e3ebe2; }
+  .tablescroll { max-height: 420px; overflow-y: auto; }
+  .tablescroll thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+  .csvbtn {
+    margin-left: 10px; border: 1px solid var(--line); background: var(--card); color: var(--teal);
+    font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+  }
+  .csvbtn:hover { background: #f0f4ef; border-color: var(--sage); }
+
+  .sunrow { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; justify-content: center; padding: 14px 20px; font-size: 15px; color: var(--muted); }
+  .sunrow b { color: var(--teal); font-weight: 700; margin-left: 3px; }
+  .moonchip { display: inline-flex; align-items: center; gap: 6px; }
+  .moonchip svg { display: block; }
+
+  .chartwrap { width: 100%; overflow: hidden; }
+  svg.chart { width: 100%; height: auto; display: block; }
+
+  table.tides { width: 100%; border-collapse: collapse; }
+  table.tides th, table.tides td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 15px; }
+  table.tides th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 700; }
+  table.tides td.h { font-variant-numeric: tabular-nums; }
+  table.tides tr.dayrow td { background: #f3f6f2; font-weight: 700; color: var(--teal); font-size: 13px; letter-spacing: .3px; }
+
+  /* Calendar */
+  .calnav { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 6px; }
+  .calnav .mon { font-weight: 800; font-size: 18px; min-width: 190px; text-align: center; color: var(--teal); }
+  .calgridwrap { overflow-x: auto; }
+  .card.calcard { padding: 14px 12px; }
+  .calgrid-head { display: grid; grid-template-columns: repeat(7, 1fr); min-width: 960px; }
+  .caldow { text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 700; padding: 0 0 6px; }
+
+  /* Each week is a curve layer with the day cells sitting on top of it. */
+  .calweek {
+    position: relative; min-width: 960px; margin-bottom: 8px;
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card);
+  }
+  .calcurve { position: absolute; top: 0; left: 0; width: 100%; height: 74px; display: block; }
+  .calrow { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); }
+  /* The top 74px of each cell is reserved for the week's tide curve, which is drawn
+     across the whole row. Day number and moon marker are pinned to opposite corners
+     of that band so neither sits on the curve or on each other. */
+  .calcell {
+    padding: 74px 6px 6px; cursor: pointer; min-height: 128px; position: relative;
+    display: flex; flex-direction: column; border-left: 1px solid transparent;
+    transition: background .1s;
+  }
+  .moon { position: absolute; top: 5px; left: 6px; display: flex; align-items: center; gap: 3px; pointer-events: none; }
+  .moon span { font-size: 9px; font-weight: 700; letter-spacing: .3px; color: var(--teal); opacity: .85; }
+  .calcell .cd {
+    position: absolute; top: 4px; right: 8px;
+    font-size: 13px; font-weight: 800; color: var(--teal); opacity: .8;
+    pointer-events: none; font-variant-numeric: tabular-nums;
+  }
+  .calcell:hover { background: rgba(130,160,140,.16); }
+  /* Adjacent-month days are marked by a tinted cell, not by fading the text.
+     Fading crushed contrast to ~1.8:1; the tint carries the same signal and keeps
+     every tide height legible. */
+  /* Must stay translucent: cells paint after the week curve, so an opaque fill here
+     hides the curve entirely on a week made only of adjacent-month days. */
+  .calcell.out { background: rgba(45,85,95,.075); }
+  .calcell.out:hover { background: rgba(45,85,95,.13); }
+  .calcell.out .cd { opacity: .55; }
+  .calcell.today .cd { color: var(--amber-text); opacity: 1; }
+  /* Tide events: two columns of time + height, highs emphasized. */
+  .evs { display: grid; grid-template-columns: 1fr 1fr; gap: 0 6px; margin-top: 2px; }
+  .ev { display: flex; justify-content: space-between; gap: 4px; font-size: 11px; line-height: 1.5; white-space: nowrap; }
+  .ev .v { font-variant-numeric: tabular-nums; }
+  .ev.hi { color: var(--amber-text); font-weight: 700; }
+  .ev.lo { color: #66756f; }
+  .ev.lo.neg { color: var(--lowneg); font-weight: 700; }
+  .calnote { font-size: 12px; color: var(--muted); margin-top: 12px; text-align: center; }
+  .calnote .k-hi { color: var(--amber); }
+  .calnote .k-neg { color: var(--lowneg); }
+
+  /* Narrow screens: let the brand take its own line so the search keeps its width. */
+  @media (max-width: 660px) {
+    header.appbar { flex-wrap: wrap; gap: 10px; padding: 12px 14px; }
+    .brand { flex: 1 1 100%; }
+    .searchwrap { max-width: none; }
+    .stationhead { align-items: flex-start; }
+    .stationhead .name { font-size: 21px; }
+  }
+
+  .aboutlink {
+    border: none; background: none; color: var(--teal); font-family: inherit; font-size: 12px;
+    text-decoration: underline; cursor: pointer; padding: 0 2px;
+  }
+  .aboutlink:hover { color: var(--amber); }
+  .modalwrap {
+    position: fixed; inset: 0; z-index: 60; background: rgba(31,61,69,.42);
+    display: flex; align-items: flex-start; justify-content: center; padding: 40px 18px; overflow-y: auto;
+  }
+  .modalwrap[hidden] { display: none; }
+  .modal {
+    position: relative; background: var(--card); border-radius: 16px; box-shadow: 0 20px 60px rgba(31,61,69,.28);
+    max-width: 660px; width: 100%; padding: 26px 30px 30px; line-height: 1.6; font-size: 14.5px;
+  }
+  .modal h2 { margin: 0 0 4px; font-size: 22px; color: var(--teal); }
+  .modal h3 {
+    margin: 22px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--amber); font-weight: 800;
+  }
+  .modal p { margin: 0 0 10px; }
+  .modal b { color: var(--teal); }
+  .modalclose {
+    position: absolute; top: 12px; right: 14px; border: none; background: none;
+    font-size: 26px; line-height: 1; color: var(--muted); cursor: pointer; padding: 4px 8px; border-radius: 8px;
+  }
+  .modalclose:hover { background: #f0f4ef; color: var(--ink); }
+  .abouttable { border-collapse: collapse; margin: 6px 0 12px; font-size: 13.5px; }
+  .abouttable th, .abouttable td { text-align: left; padding: 5px 18px 5px 0; border-bottom: 1px solid var(--line); }
+  .abouttable th { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  .abouttable td:not(:first-child) { font-variant-numeric: tabular-nums; }
+  /* Marks a station whose tides come from the in-house harmonic model. */
+  .srcchip {
+    display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px;
+    background: rgba(190,120,40,.14); color: var(--amber);
+    font-size: 10.5px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase;
+    cursor: pointer; vertical-align: 3px; border: none; font-family: inherit;
+  }
+  .srcchip:hover { background: rgba(190,120,40,.24); }
+
+  /* Touch and safe-area handling, last so it wins over the narrow-screen block above.
+     The page runs edge to edge under the status bar, Dynamic Island and home
+     indicator (viewport-fit=cover), so the chrome insets itself. env() resolves to
+     zero in a desktop browser, making all of this a no-op off iOS. */
+  html { -webkit-text-size-adjust: 100%; }
+  body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
+  header.appbar {
+    padding-top: calc(14px + env(safe-area-inset-top));
+    padding-left: calc(18px + env(safe-area-inset-left));
+    padding-right: calc(18px + env(safe-area-inset-right));
+  }
+  @media (max-width: 660px) {
+    header.appbar {
+      padding-top: calc(12px + env(safe-area-inset-top));
+      padding-left: calc(14px + env(safe-area-inset-left));
+      padding-right: calc(14px + env(safe-area-inset-right));
+    }
+  }
+  main {
+    padding-left: calc(18px + env(safe-area-inset-left));
+    padding-right: calc(18px + env(safe-area-inset-right));
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+  }
+  /* Chrome should not offer a text-selection callout on long press; the tide tables
+     and the about dialog still do, because their numbers are worth copying. */
+  header.appbar, .seg, .nextcard, .calcell, .datenav, .controlbar, .elevbox {
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  .modalwrap { padding-top: calc(40px + env(safe-area-inset-top)); }
+
+  .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
+  .empty .big { font-size: 42px; margin-bottom: 8px; }
+  .status { text-align: center; color: var(--muted); padding: 30px; font-size: 15px; }
+  .err { color: #a23b2f; }
+  footer.note { text-align: center; color: var(--muted); font-size: 12px; margin-top: 24px; }
+  footer.note code { background: #eef1ec; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header class="appbar">
+  <div class="brand">
+    <h1>TIDES</h1>
+    <span class="sub">NOAA predictions</span>
+  </div>
+  <div class="searchwrap">
+    <div class="searchrow">
+      <input id="search" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Search a station, or paste coordinates (e.g. 32.85, -117.26)…" />
+      <button class="btn" id="locbtn" title="Use my location">📍</button>
+    </div>
+    <div class="results" id="results"></div>
+  </div>
+  <div class="favwrap">
+    <div class="favgroup">
+      <button id="favstar" title="Save this station">☆</button>
+      <button id="favcaret" title="Saved stations">▾</button>
+    </div>
+    <div class="favmenu" id="favmenu"></div>
+  </div>
+</header>
+
+<main>
+  <div id="app">
+    <div class="empty" id="welcome">
+      <div class="big">🌊</div>
+      <div>Search for a coastal station above, or tap 📍 to find the nearest one.</div>
+    </div>
+  </div>
+  <footer class="note">
+    Heights are relative to <code>MLLW</code>. Times shown in the station's local time zone.
+    Not for navigation. <button class="aboutlink" id="aboutBtn">About the data</button>
+  </footer>
+</main>
+
+<div class="modalwrap" id="aboutModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <button class="modalclose" id="aboutClose" aria-label="Close">×</button>
+    <h2 id="aboutTitle">About the data</h2>
+
+    <h3>United States stations</h3>
+    <p>Predictions come live from the <b>NOAA CO-OPS</b> API, covering all US coasts plus Alaska,
+    Hawaii, the territories and the Great Lakes. Heights are relative to <b>MLLW</b> (mean lower
+    low water). These are NOAA's own published predictions, not a model of them.</p>
+
+    <h3>Mexican stations</h3>
+    <p><b>These four sites work differently, and it is worth knowing how.</b> Bahía de los Ángeles,
+    Bahía de San Quintín, Ensenada and Loreto are not served by any free prediction API. Their tides
+    here are computed from <b>harmonic constants derived in-house</b>: CICESE
+    (<i>predmar.cicese.mx</i>) publishes monthly tide calendars, and two years of those published
+    tables (2025 and 2026) were parsed and fitted by least squares to recover the underlying
+    harmonic constituents.</p>
+    <p>The fit uses Schureman equilibrium arguments with nodal <i>f</i> and <i>u</i> corrections
+    applied, so the constants are properly referenced and stay valid outside the years fitted,
+    rather than absorbing one year's lunar node position. Each published high and low also
+    contributes a zero-derivative constraint, which pins the model's turning points to the
+    published ones.</p>
+    <p><b>Accuracy.</b> Fitting on 2025 alone and predicting 2026 blind, against CICESE's own
+    published values:</p>
+    <table class="abouttable">
+      <tr><th>Site</th><th>Height error</th><th>Timing error</th></tr>
+      <tr><td>Bahía de los Ángeles</td><td>2.8 cm</td><td>5.6 min</td></tr>
+      <tr><td>Bahía de San Quintín</td><td>2.1 cm</td><td>5.8 min</td></tr>
+      <tr><td>Ensenada</td><td>1.5 cm</td><td>4.3 min</td></tr>
+      <tr><td>Loreto</td><td>1.7 cm</td><td>9.9 min</td></tr>
+    </table>
+    <p>Heights are relative to <b>BMI</b> (bajamar media inferior), which is equivalent to MLLW, so
+    the two sources are directly comparable. Because the constants are embedded in this page, these
+    four sites need no network connection at all.</p>
+    <p><b>Clock caveat.</b> CICESE prints each monthly calendar on a single time meridian: standard
+    time for November through March, daylight time for April through October. Real daylight saving
+    in Baja California's border municipalities starts mid-March and ends in early November, so for
+    roughly three weeks each March a printed CICESE table sits an hour behind civil time. This app
+    shows civil time, and flags those dates when you view them.</p>
+
+    <h3>Sun and moon</h3>
+    <p>Sunrise and sunset are computed from each station's latitude and longitude and aligned to its
+    local clock. Moon phases use the Meeus algorithm, which agrees with CICESE's published phase
+    times to under a minute.</p>
+
+    <h3>Limitations</h3>
+    <p>Everything here is a <b>tide prediction</b>. Real water levels depart from prediction with
+    weather, notably barometric pressure, wind and river discharge, by amounts that can exceed the
+    errors quoted above. <b>Not for navigation.</b></p>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ * Data source abstraction.
+ * NOAAProvider implements the whole app's data needs against the free
+ * NOAA CO-OPS API (US coasts, AK, HI, territories, Great Lakes).
+ * A future GlobalProvider (e.g. WorldTides, needs an API key) can
+ * implement the same methods and be swapped in with no UI changes.
+ * ------------------------------------------------------------------ */
+const NOAAProvider = {
+  name: "NOAA CO-OPS",
+  _stations: null,
+
+  // Returns [{id, name, state, lat, lng}]
+  async getStations() {
+    if (this._stations) return this._stations;
+    const url = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions";
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("Could not load station list (" + r.status + ").");
+    const data = await r.json();
+    this._stations = data.stations.map(s => ({
+      id: s.id, name: s.name, state: s.state || "", lat: s.lat, lng: s.lng
+    }));
+    return this._stations;
+  },
+
+  // begin/end are YYYYMMDD (inclusive local days). units 'english'|'metric'.
+  // opts.series: fetch the smooth curve series too (day view). false for calendar.
+  // opts.interval: '' (6-min) or 'h' (hourly) for the series.
+  // Returns { hilo:[{time,height,type}], series:[{time,height}] }.
+  async getPredictions(stationId, begin, end, units, opts = {}) {
+    const { series = true, interval = "" } = opts;
+    const base = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter";
+    const common =
+      "&application=DrewTideApp&datum=MLLW&time_zone=lst_ldt&format=json" +
+      "&units=" + units + "&station=" + encodeURIComponent(stationId) +
+      "&begin_date=" + begin + "&end_date=" + end;
+
+    const reqs = [fetch(base + "?product=predictions&interval=hilo" + common)];
+    if (series) reqs.push(fetch(base + "?product=predictions" + (interval ? "&interval=" + interval : "") + common));
+
+    const responses = await Promise.all(reqs);
+    const hiloJson = await responses[0].json();
+    if (hiloJson.error) throw new Error(hiloJson.error.message || "No predictions for this station.");
+    const serJson = series ? await responses[1].json() : { predictions: [] };
+
+    const parse = t => {
+      const [d, tm] = t.split(" ");
+      const [Y, M, D] = d.split("-").map(Number);
+      const [h, mi] = tm.split(":").map(Number);
+      return new Date(Y, M - 1, D, h, mi);
+    };
+    const hilo = (hiloJson.predictions || []).map(p => ({
+      time: parse(p.t), height: parseFloat(p.v), type: p.type
+    }));
+    const ser = (serJson.predictions || []).map(p => ({
+      time: parse(p.t), height: parseFloat(p.v)
+    }));
+    return { hilo, series: ser };
+  },
+
+  // Timezone info for aligning computed sunrise/sunset to the station's local clock.
+  // Returns { stdOffset: hours from UTC (standard time), observesDST: bool }.
+  // DST is US-scoped, which matches the NOAA station set; a future global provider
+  // would supply its own zone data here.
+  _info: {},
+  async getStationInfo(stationId) {
+    if (this._info[stationId]) return this._info[stationId];
+    let stdOffset = -8; // safe default; overwritten below
+    try {
+      const r = await fetch("https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/" +
+        encodeURIComponent(stationId) + "/details.json");
+      const d = await r.json();
+      if (typeof d.timezone === "number") stdOffset = d.timezone;
+      else if (typeof d.timemeridian === "number") stdOffset = Math.round(d.timemeridian / 15);
+    } catch (e) { /* fall back to default */ }
+    // Eastern/Central/Pacific/Alaska observe DST; Hawaii, Atlantic (PR/VI), Guam, Samoa do not.
+    const observesDST = [-9, -8, -6, -5].includes(Math.round(stdOffset));
+    return (this._info[stationId] = { stdOffset, observesDST });
+  }
+};
+
+/* ------------------------------------------------------------------ *
+ * Harmonic provider: offline tide prediction from harmonic constants.
+ *
+ * Constants were derived by least-squares harmonic analysis of CICESE's
+ * published tide calendars (predmar.cicese.mx) over 2025-2026, with Schureman
+ * nodal f/u corrections applied during the fit so they stay valid in any year.
+ * Blind skill (fit on 2025, scored against 2026): 1.5-2.8 cm RMS on height
+ * and 4-10 min mean error on the timing of highs and lows.
+ *
+ * Heights are cm above BMI (Bajamar Media Inferior), which is equivalent to the
+ * MLLW datum the NOAA stations use, so the two sources are directly comparable.
+ * Unlike the NOAA path this needs no network, which is the point: these are
+ * remote field sites.
+ * ------------------------------------------------------------------ */
+const MX_STATIONS = {
+  bla: {n:"Bahia de los Angeles",st:"B.C.",lat:28.95,lng:-113.55,off:-8,dst:false,Z0:101.69,rms:2.76,tmae:5.6,c:{"M2":[66.295,249.86],"S2":[34.86,268.98],"N2":[18.423,230.94],"K2":[9.793,268.89],"NU2":[3.124,241.45],"MU2":[3.834,202.34],"2N2":[3.382,192.44],"L2":[1.628,280.34],"T2":[2.94,265.04],"K1":[33.589,185.87],"O1":[21.824,161.03],"P1":[10.824,180.24],"Q1":[3.887,149.32],"J1":[2.314,203.86],"OO1":[1.0,223.6],"RHO1":[0.827,144.37],"2Q1":[0.542,135.07],"S1":[1.565,298.92],"MF":[0.587,162.06],"MM":[0.968,185.12],"SSA":[2.957,302.95],"SA":[18.586,155.46],"MSF":[0.618,187.74],"M4":[0.54,330.37],"MS4":[0.418,156.98],"MN4":[0.336,236.98],"S4":[0.085,302.19],"M6":[0.543,251.94],"2MS6":[0.348,222.46],"MK3":[0.206,97.18],"M3":[0.641,87.8]}},
+  snq: {n:"Bahia de San Quintin",st:"B.C.",lat:30.47,lng:-116.0,off:-8,dst:true,Z0:81.27,rms:2.05,tmae:5.8,c:{"M2":[53.894,135.15],"S2":[23.05,148.8],"N2":[11.209,111.06],"K2":[6.986,144.65],"NU2":[1.964,110.5],"MU2":[1.091,95.74],"2N2":[1.323,77.48],"L2":[0.973,135.79],"T2":[1.413,139.55],"2SM2":[0.178,87.43],"K1":[30.466,214.77],"O1":[19.247,186.91],"P1":[9.542,211.8],"Q1":[3.115,174.73],"J1":[2.141,244.53],"OO1":[0.972,281.92],"RHO1":[0.674,167.83],"2Q1":[0.451,180.28],"S1":[1.522,172.76],"MF":[0.332,256.69],"MM":[1.713,169.8],"SSA":[2.791,248.45],"SA":[7.793,197.32],"MSF":[2.003,187.63],"M4":[0.959,202.3],"MS4":[0.832,244.3],"MN4":[0.726,190.99],"S4":[0.332,292.97],"M6":[0.741,194.26],"2MS6":[0.37,180.02],"MK3":[0.715,243.47],"M3":[1.049,202.5]}},
+  ens: {n:"Ensenada",st:"B.C.",lat:31.85,lng:-116.63,off:-8,dst:true,Z0:81.52,rms:1.47,tmae:4.3,c:{"M2":[48.685,124.7],"S2":[20.786,132.88],"N2":[11.535,96.06],"K2":[6.16,128.19],"NU2":[1.972,106.45],"MU2":[1.688,55.77],"2N2":[1.766,58.48],"L2":[0.645,163.0],"T2":[1.198,114.61],"2SM2":[0.061,117.81],"K1":[32.324,206.61],"O1":[20.951,178.06],"P1":[10.023,201.71],"Q1":[3.355,161.75],"J1":[2.089,223.47],"OO1":[1.013,252.96],"RHO1":[0.655,175.72],"2Q1":[0.474,155.15],"S1":[0.305,151.47],"MF":[0.222,108.87],"MM":[0.241,199.58],"SSA":[1.614,274.36],"SA":[7.72,187.7],"MSF":[0.322,94.28],"M4":[0.305,286.69],"MS4":[0.169,213.14],"MN4":[0.369,165.94],"S4":[0.174,223.46],"2MS6":[0.126,36.56],"MK3":[0.072,221.97],"M3":[0.763,173.17]}},
+  lto: {n:"Loreto",st:"B.C.S.",lat:26.01,lng:-111.35,off:-7,dst:false,Z0:43.99,rms:1.69,tmae:9.9,c:{"M2":[14.701,105.26],"S2":[12.862,114.31],"N2":[3.093,98.01],"K2":[3.58,112.16],"NU2":[0.576,107.03],"MU2":[0.911,111.47],"2N2":[0.561,63.53],"L2":[0.376,20.56],"T2":[0.878,93.54],"2SM2":[0.114,162.07],"K1":[26.398,183.96],"O1":[18.339,158.92],"P1":[8.201,176.79],"Q1":[2.815,144.81],"J1":[1.823,188.82],"OO1":[0.803,218.44],"RHO1":[0.489,142.76],"2Q1":[0.315,136.97],"S1":[1.107,0.54],"MF":[0.424,130.3],"MM":[0.939,144.28],"SSA":[3.41,222.51],"SA":[13.824,164.37],"MSF":[0.548,114.04],"M4":[0.9,349.28],"MS4":[0.521,285.77],"MN4":[0.277,354.33],"S4":[0.112,132.01],"MK3":[0.3,333.18],"M3":[0.501,12.7]}}
+};
+
+// Doodson coefficients over (tau, s, h, p, p1), a 90-degree phase term, and the
+// nodal-correction family. Must match harmonics.py exactly.
+const MX_DOODSON = {
+  "M2":[2,0,0,0,0,0,"M2"],      "S2":[2,2,-2,0,0,0,null],    "N2":[2,-1,0,1,0,0,"M2"],
+  "K2":[2,2,0,0,0,0,"K2"],      "NU2":[2,-1,2,-1,0,0,"M2"],  "MU2":[2,-2,2,0,0,0,"M2"],
+  "2N2":[2,-2,0,2,0,0,"M2"],    "L2":[2,1,0,-1,0,180,"M2"],  "T2":[2,2,-3,0,1,0,null],
+  "2SM2":[2,4,-4,0,0,0,"M2"],   "K1":[1,1,0,0,0,90,"K1"],    "O1":[1,-1,0,0,0,-90,"O1"],
+  "P1":[1,1,-2,0,0,-90,null],   "Q1":[1,-2,0,1,0,-90,"O1"],  "J1":[1,2,0,-1,0,90,"J1"],
+  "OO1":[1,3,0,0,0,90,"OO1"],   "RHO1":[1,-2,2,-1,0,-90,"O1"],"2Q1":[1,-3,0,2,0,-90,"O1"],
+  "S1":[1,1,-1,0,0,0,null],     "MF":[0,2,0,0,0,0,"MF"],     "MM":[0,1,0,-1,0,0,"MM"],
+  "SSA":[0,0,2,0,0,0,null],     "SA":[0,0,1,0,0,0,null],     "MSF":[0,2,-2,0,0,0,"M2"],
+  "M4":[4,0,0,0,0,0,"M4"],      "MS4":[4,2,-2,0,0,0,"M2"],   "MN4":[4,-1,0,1,0,0,"M4"],
+  "S4":[4,4,-4,0,0,0,null],     "M6":[6,0,0,0,0,0,"M6"],     "2MS6":[6,2,-2,0,0,0,"M4"],
+  "MK3":[3,1,0,0,0,90,"MK3"],   "M3":[3,0,0,0,0,0,"M3"]
+};
+// Hourly rates of the astronomical arguments, for advancing V within a day.
+const MX_RATES = [14.4920521, 0.5490165, 0.0410686, 0.0046418, 0.0000020];
+const MX_EPOCH = Date.UTC(1899, 11, 31, 12, 0, 0);
+const DEG = Math.PI / 180;
+
+function mxAstro(utcMs) {
+  const days = (utcMs - MX_EPOCH) / 86400000;
+  const T = days / 36525;
+  const d = new Date(utcMs);
+  const hours = d.getUTCHours() + d.getUTCMinutes()/60 + d.getUTCSeconds()/3600;
+  const s  = 277.0248 + 481267.8906*T + 0.0020*T*T;
+  const h  = 280.1895 +  36000.7689*T + 0.000303*T*T;
+  const p  = 334.3853 +   4069.0340*T - 0.010340*T*T;
+  const N  = 259.1568 -   1934.1420*T + 0.002078*T*T;
+  const p1 = 281.2208 +      1.7192*T + 0.000450*T*T;
+  return { tau: 15*hours + h - s, s, h, p, p1, N };
+}
+
+function mxNodal(kind, N) {
+  if (!kind) return [1, 0];
+  const n = N*DEG, c1=Math.cos(n), c2=Math.cos(2*n), c3=Math.cos(3*n);
+  const s1 = Math.sin(n), s2 = Math.sin(2*n), s3 = Math.sin(3*n);
+  switch (kind) {
+    case "M2":  return [1.0004 - 0.0373*c1 + 0.0002*c2, -2.14*s1];
+    case "K1":  return [1.0060 + 0.1150*c1 - 0.0088*c2 + 0.0006*c3, -8.86*s1 + 0.68*s2 - 0.07*s3];
+    case "O1":  return [1.0089 + 0.1871*c1 - 0.0147*c2 + 0.0014*c3, 10.80*s1 - 1.34*s2 + 0.19*s3];
+    case "K2":  return [1.0241 + 0.2863*c1 + 0.0083*c2 - 0.0015*c3, -17.74*s1 + 0.68*s2 - 0.04*s3];
+    case "J1":  return [1.0129 + 0.1676*c1 - 0.0170*c2 + 0.0016*c3, -12.94*s1 + 1.34*s2 - 0.19*s3];
+    case "OO1": return [1.1027 + 0.6504*c1 + 0.0317*c2 - 0.0014*c3, -36.68*s1 + 4.02*s2 - 0.57*s3];
+    case "MF":  return [1.0429 + 0.4135*c1 - 0.0040*c2, -23.74*s1 + 2.68*s2 - 0.38*s3];
+    case "MM":  return [1.0000 - 0.1300*c1 + 0.0013*c2, 0];
+  }
+  const m = mxNodal("M2", N);
+  if (kind === "M4") return [m[0]*m[0], 2*m[1]];
+  if (kind === "M6") return [m[0]*m[0]*m[0], 3*m[1]];
+  if (kind === "M3") return [Math.pow(m[0], 1.5), 1.5*m[1]];
+  if (kind === "MK3") { const k = mxNodal("K1", N); return [m[0]*k[0], m[1]+k[1]]; }
+  return [1, 0];
+}
+
+// Station-local UTC offset in hours. Baja California's border municipalities kept
+// daylight saving after Mexico dropped it nationally in 2022, so Ensenada and San
+// Quintin shift while Bahia de los Angeles and Loreto stay fixed year round.
+function mxOffset(st, localDate) {
+  return st.off + (st.dst && isUSDST(localDate) ? 1 : 0);
+}
+
+/* Water level in cm for one local day, sampled every stepMin minutes.
+   The slow astronomical arguments and nodal terms are evaluated once per day and
+   V is advanced linearly within it, which keeps a month of calendar sampling fast
+   without measurable loss of accuracy. */
+function mxDayLevels(st, dayLocal, stepMin, count) {
+  const off = mxOffset(st, dayLocal);
+  const baseUtc = Date.UTC(dayLocal.getFullYear(), dayLocal.getMonth(), dayLocal.getDate(), 0, 0)
+                  - off*3600000;
+  const A = mxAstro(baseUtc);
+  const terms = [];
+  for (const name in st.c) {
+    const D = MX_DOODSON[name]; if (!D) continue;
+    const [it, is_, ih, ip, ip1, ph, kind] = D;
+    const [amp, g] = st.c[name];
+    const V0 = it*A.tau + is_*A.s + ih*A.h + ip*A.p + ip1*A.p1 + ph;
+    const speed = it*MX_RATES[0] + is_*MX_RATES[1] + ih*MX_RATES[2] + ip*MX_RATES[3] + ip1*MX_RATES[4];
+    const [f, u] = mxNodal(kind, A.N);
+    terms.push({ amp: f*amp, phase: (V0 + u - g)*DEG, w: speed*DEG });
+  }
+  const out = new Float64Array(count);
+  for (let i = 0; i < count; i++) {
+    const hrs = i*stepMin/60;
+    let v = st.Z0;
+    for (let k = 0; k < terms.length; k++) v += terms[k].amp * Math.cos(terms[k].phase + terms[k].w*hrs);
+    out[i] = v;
+  }
+  return out;
+}
+
+const HarmonicProvider = {
+  name: "CICESE-derived harmonics",
+
+  stationList() {
+    return Object.keys(MX_STATIONS).map(k => ({
+      id: "mx-" + k, name: MX_STATIONS[k].n, state: MX_STATIONS[k].st,
+      lat: MX_STATIONS[k].lat, lng: MX_STATIONS[k].lng
+    }));
+  },
+
+  _st(id) { return MX_STATIONS[id.replace(/^mx-/, "")]; },
+
+  async getStationInfo(stationId) {
+    const st = this._st(stationId);
+    return { stdOffset: st.off, observesDST: st.dst, harmonic: true, rms: st.rms };
+  },
+
+  async getPredictions(stationId, begin, end, units, opts = {}) {
+    const st = this._st(stationId);
+    if (!st) throw new Error("Unknown station " + stationId);
+    const toUnits = v => units === "metric" ? v/100 : v/30.48;   // cm -> m or ft
+    const mk = (y, m, d) => new Date(+y, +m - 1, +d);
+    const d0 = mk(begin.slice(0,4), begin.slice(4,6), begin.slice(6,8));
+    const d1 = mk(end.slice(0,4),   end.slice(4,6),   end.slice(6,8));
+    const nDays = Math.round((d1 - d0)/86400000) + 1;
+
+    const step = opts.interval === "h" ? 60 : 6;
+    const series = [];
+    // 1-minute sampling drives turning-point detection; the display series is
+    // decimated from the same curve so the chart and the hi/lo table agree.
+    const fine = [];
+    for (let dnum = 0; dnum < nDays; dnum++) {
+      const day = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + dnum);
+      const lv = mxDayLevels(st, day, 1, 1440);
+      for (let i = 0; i < 1440; i++) {
+        const t = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, i);
+        fine.push({ time: t, cm: lv[i] });
+        if (opts.series !== false && i % step === 0) series.push({ time: t, height: toUnits(lv[i]) });
+      }
+    }
+    const hilo = [];
+    for (let i = 1; i < fine.length - 1; i++) {
+      const a = fine[i-1].cm, b = fine[i].cm, c = fine[i+1].cm;
+      if ((b >= a && b > c) || (b <= a && b < c)) {
+        hilo.push({ time: fine[i].time, height: toUnits(b), type: (b >= a && b > c) ? "H" : "L" });
+      }
+    }
+    return { hilo, series };
+  }
+};
+
+/* Routes each station to its source. NOAA ids are numeric; harmonic ids carry an
+   "mx-" prefix. Both honour the same interface, so nothing downstream changes. */
+const provider = {
+  async getStations() {
+    let noaa = [];
+    try { noaa = await NOAAProvider.getStations(); } catch (e) { /* offline: MX still works */ }
+    return HarmonicProvider.stationList().concat(noaa);
+  },
+  getPredictions(id, b, e, units, opts) {
+    return (String(id).startsWith("mx-") ? HarmonicProvider : NOAAProvider)
+      .getPredictions(id, b, e, units, opts);
+  },
+  getStationInfo(id) {
+    return (String(id).startsWith("mx-") ? HarmonicProvider : NOAAProvider).getStationInfo(id);
+  }
+};
+
+/* ------------------------------------------------------------------ *
+ * App state + helpers
+ * ------------------------------------------------------------------ */
+const state = {
+  station: JSON.parse(localStorage.getItem("tide.station") || "null"),
+  units: localStorage.getItem("tide.units") || "english",
+  view: localStorage.getItem("tide.view") || "day",          // 'day' | 'calendar'
+  days: parseInt(localStorage.getItem("tide.days") || "1", 10), // 1..7
+  date: startOfToday(),          // anchor day for day view
+  month: firstOfMonth(new Date()), // anchor month for calendar view
+  favorites: [],                 // filled from localStorage once helpers are defined
+  // Inundation view. The threshold is held in metres so the ft/m toggle cannot
+  // round-trip it lossily; the input converts on the way in and out.
+  elevM: parseFloat(localStorage.getItem("tide.elevM") || "0.64"),   // ~2.1 ft
+  range: localStorage.getItem("tide.range") || "1mo",
+  focus: localStorage.getItem("tide.focus") || "sub",   // 'sub' inundated, 'exp' exposed
+  rangeStart: null               // set at boot from the chosen range
+};
+
+const RANGES = [
+  { k: "1d",  label: "1 day",    days: 1 },
+  { k: "1w",  label: "1 week",   days: 7 },
+  { k: "1mo", label: "1 month",  months: 1 },
+  { k: "3mo", label: "3 months", months: 3 },
+  { k: "1y",  label: "1 year",   months: 12 }
+];
+function rangeDef() { return RANGES.find(r => r.k === state.range) || RANGES[2]; }
+
+// Inclusive [start, end] local days for the current range.
+function rangeBounds() {
+  const r = rangeDef(), s = state.rangeStart || defaultRangeStart();
+  const end = r.days ? addDays(s, r.days - 1)
+                     : addDays(new Date(s.getFullYear(), s.getMonth() + r.months, s.getDate()), -1);
+  return [s, end];
+}
+function defaultRangeStart() {
+  const r = rangeDef();
+  return r.days ? startOfToday() : firstOfMonth(new Date());
+}
+function shiftRange(start, dir) {
+  const r = rangeDef();
+  return r.days ? addDays(start, dir * r.days)
+                : new Date(start.getFullYear(), start.getMonth() + dir * r.months, start.getDate());
+}
+function rangeLabelText() {
+  const [a, b] = rangeBounds();
+  const f = d => d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return rangeDef().days === 1 ? f(a) : f(a) + " – " + f(b);
+}
+
+const M_PER_FT = 0.3048;
+function elevDisplay() { return state.units === "metric" ? state.elevM : state.elevM / M_PER_FT; }
+function setElevDisplay(v) {
+  state.elevM = state.units === "metric" ? v : v * M_PER_FT;
+  localStorage.setItem("tide.elevM", String(state.elevM));
+}
+// NOAA publishes to MLLW; the Mexican harmonic sites are on BMI, its equivalent.
+function datumName() {
+  return state.station && String(state.station.id).startsWith("mx-") ? "BMI" : "MLLW";
+}
+
+function startOfToday() { const d = new Date(); d.setHours(0,0,0,0); return d; }
+function firstOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function addMonths(d, n) { return new Date(d.getFullYear(), d.getMonth()+n, 1); }
+function ymd(d) {
+  return d.getFullYear() + String(d.getMonth()+1).padStart(2,"0") + String(d.getDate()).padStart(2,"0");
+}
+function sameDay(a, b) {
+  return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+}
+function unitLabel() { return state.units === "metric" ? "m" : "ft"; }
+function fmtHeight(v) { return v.toFixed(state.units === "metric" ? 2 : 1); }
+function fmtTime(d) {
+  let h = d.getHours(), m = d.getMinutes();
+  const ap = h >= 12 ? "PM" : "AM";
+  h = h % 12; if (h === 0) h = 12;
+  return h + ":" + String(m).padStart(2,"0") + " " + ap;
+}
+function fmtTimeShort(d) { // "6:12p" for tight spaces
+  let h = d.getHours(), m = d.getMinutes();
+  const ap = h >= 12 ? "p" : "a";
+  h = h % 12; if (h === 0) h = 12;
+  return h + ":" + String(m).padStart(2,"0") + ap;
+}
+function fmtDayLabel(d) {
+  const label = d.toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" });
+  if (sameDay(d, startOfToday())) return "Today · " + label;
+  return label;
+}
+function haversine(la1, lo1, la2, lo2) {
+  const R = 6371, toR = x => x*Math.PI/180;
+  const dLa = toR(la2-la1), dLo = toR(lo2-lo1);
+  const a = Math.sin(dLa/2)**2 + Math.cos(toR(la1))*Math.cos(toR(la2))*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ------------------------------------------------------------------ *
+ * Solar (sunrise/sunset), computed from lat/lng, no API needed.
+ * Astronomy adapted from the standard NOAA / SunCalc algorithm; returns
+ * UTC instants, which sunForDay() then shifts onto the station's clock.
+ * ------------------------------------------------------------------ */
+const SUN = (() => {
+  const rad = Math.PI/180, dayMs = 86400000, J1970 = 2440588, J2000 = 2451545;
+  const e = rad * 23.4397; // obliquity of the ecliptic
+  const toJulian = d => d.valueOf()/dayMs - 0.5 + J1970;
+  const fromJulian = j => new Date((j + 0.5 - J1970) * dayMs);
+  const toDays = d => toJulian(d) - J2000;
+  const solarMeanAnomaly = d => rad*(357.5291 + 0.98560028*d);
+  const eclipticLongitude = M => {
+    const C = rad*(1.9148*Math.sin(M) + 0.02*Math.sin(2*M) + 0.0003*Math.sin(3*M));
+    return M + C + rad*102.9372 + Math.PI;
+  };
+  const declination = L => Math.asin(Math.sin(0)*Math.cos(e) + Math.cos(0)*Math.sin(e)*Math.sin(L));
+  const julianCycle = (d, lw) => Math.round(d - 0.0009 - lw/(2*Math.PI));
+  const approxTransit = (Ht, lw, n) => 0.0009 + (Ht + lw)/(2*Math.PI) + n;
+  const solarTransitJ = (ds, M, L) => J2000 + ds + 0.0053*Math.sin(M) - 0.0069*Math.sin(2*L);
+  const hourAngle = (h, phi, d) => Math.acos((Math.sin(h) - Math.sin(phi)*Math.sin(d)) / (Math.cos(phi)*Math.cos(d)));
+
+  // Returns { sunrise:Date|null, sunset:Date|null } in UTC.
+  // null on polar day/night (sun never crosses the horizon that day).
+  return function times(date, lat, lng) {
+    const lw = rad * -lng, phi = rad * lat, d = toDays(date);
+    const n = julianCycle(d, lw);
+    const ds = approxTransit(0, lw, n);
+    const M = solarMeanAnomaly(ds);
+    const L = eclipticLongitude(M);
+    const dec = declination(L);
+    const Jnoon = solarTransitJ(ds, M, L);
+    const h0 = -0.833 * rad; // horizon incl. refraction + solar radius
+    const cosW = (Math.sin(h0) - Math.sin(phi)*Math.sin(dec)) / (Math.cos(phi)*Math.cos(dec));
+    if (cosW >= 1) return { sunrise: null, sunset: null, polar: "night" }; // sun never rises
+    if (cosW <= -1) return { sunrise: null, sunset: null, polar: "day" };  // sun never sets
+    const w0 = Math.acos(cosW);
+    const Jset = solarTransitJ(approxTransit(w0, lw, n), M, L);
+    const Jrise = Jnoon - (Jset - Jnoon);
+    return { sunrise: fromJulian(Jrise), sunset: fromJulian(Jset), polar: null };
+  };
+})();
+
+// US daylight-saving window: 2nd Sunday of March to 1st Sunday of November.
+function isUSDST(date) {
+  const y = date.getFullYear();
+  const march = new Date(y, 2, 1);
+  const start = new Date(y, 2, 1 + ((7 - march.getDay()) % 7) + 7);
+  const nov = new Date(y, 10, 1);
+  const end = new Date(y, 10, 1 + ((7 - nov.getDay()) % 7));
+  return date >= start && date < end;
+}
+function totalOffsetHours(date, info) {
+  return info.stdOffset + (info.observesDST && isUSDST(date) ? 1 : 0);
+}
+
+// Sunrise/sunset for a given local day, expressed as Dates on the same
+// browser-local timeline the tide times use. Returns {sunrise, sunset, polar, daylightMin}.
+function sunForDay(day, lat, lng, info) {
+  const noon = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 12, 0, 0);
+  const t = SUN(noon, lat, lng);
+  const off = totalOffsetHours(day, info);
+  const mk = utc => {
+    if (!utc) return null;
+    const s = new Date(utc.getTime() + off*3600*1000); // shift UTC instant to station clock
+    return new Date(day.getFullYear(), day.getMonth(), day.getDate(), s.getUTCHours(), s.getUTCMinutes());
+  };
+  const sunrise = mk(t.sunrise), sunset = mk(t.sunset);
+  const daylightMin = (sunrise && sunset) ? Math.round((sunset - sunrise)/60000) : null;
+  return { sunrise, sunset, polar: t.polar, daylightMin };
+}
+function fmtDuration(mins) {
+  if (mins == null) return "";
+  return Math.floor(mins/60) + "h " + String(mins%60).padStart(2,"0") + "m";
+}
+
+/* ------------------------------------------------------------------ *
+ * Moon phase, computed locally (same approach as the solar module).
+ * Returns { fraction: illuminated 0..1, phase: 0 new, .25 first quarter,
+ * .5 full, .75 last quarter }.
+ * ------------------------------------------------------------------ */
+const MOON = (() => {
+  const rad = Math.PI/180, dayMs = 86400000, J1970 = 2440588, J2000 = 2451545;
+  const e = rad * 23.4397;
+  const toDays = d => (d.valueOf()/dayMs - 0.5 + J1970) - J2000;
+  const rightAscension = (l,b) => Math.atan2(Math.sin(l)*Math.cos(e) - Math.tan(b)*Math.sin(e), Math.cos(l));
+  const decl = (l,b) => Math.asin(Math.sin(b)*Math.cos(e) + Math.cos(b)*Math.sin(e)*Math.sin(l));
+  const solarMeanAnomaly = d => rad*(357.5291 + 0.98560028*d);
+  const eclipticLongitude = M => {
+    const C = rad*(1.9148*Math.sin(M) + 0.02*Math.sin(2*M) + 0.0003*Math.sin(3*M));
+    return M + C + rad*102.9372 + Math.PI;
+  };
+  const sunCoords = d => { const M = solarMeanAnomaly(d), L = eclipticLongitude(M); return { dec: decl(L,0), ra: rightAscension(L,0) }; };
+  const moonCoords = d => {
+    const L = rad*(218.316 + 13.176396*d), M = rad*(134.963 + 13.064993*d), F = rad*(93.272 + 13.229350*d);
+    const l = L + rad*6.289*Math.sin(M), b = rad*5.128*Math.sin(F), dt = 385001 - 20905*Math.cos(M);
+    return { ra: rightAscension(l,b), dec: decl(l,b), dist: dt };
+  };
+  return function illumination(date) {
+    const d = toDays(date), s = sunCoords(d), m = moonCoords(d), sdist = 149598000;
+    const phi = Math.acos(Math.sin(s.dec)*Math.sin(m.dec) + Math.cos(s.dec)*Math.cos(m.dec)*Math.cos(s.ra - m.ra));
+    const inc = Math.atan2(sdist*Math.sin(phi), m.dist - sdist*Math.cos(phi));
+    const angle = Math.atan2(Math.cos(s.dec)*Math.sin(s.ra - m.ra),
+                             Math.sin(s.dec)*Math.cos(m.dec) - Math.cos(s.dec)*Math.sin(m.dec)*Math.cos(s.ra - m.ra));
+    return { fraction: (1 + Math.cos(inc))/2, phase: 0.5 + 0.5*inc*(angle < 0 ? -1 : 1)/Math.PI };
+  };
+})();
+
+const D2R_M = Math.PI / 180;
+const PHASES = [
+  { v: 0,    key: "new",  name: "New moon",      short: "New"   },
+  { v: 0.25, key: "fq",   name: "First quarter", short: "1st ¼" },
+  { v: 0.5,  key: "full", name: "Full moon",     short: "Full"  },
+  { v: 0.75, key: "lq",   name: "Last quarter",  short: "Last ¼"}
+];
+
+// True UTC instant for a local wall-clock time at the current station. Moon phase
+// instants must be judged against the station's calendar day, not the viewer's:
+// a phase falling at 21:19 in Baja is still the previous day for someone in UTC.
+function stationUTC(y, mo, d, hh, mi) {
+  const info = state.info;
+  const off = info
+    ? info.stdOffset + (info.observesDST && isUSDST(new Date(y, mo, d)) ? 1 : 0)
+    : -(new Date().getTimezoneOffset() / 60);
+  return new Date(Date.UTC(y, mo, d, hh || 0, mi || 0) - off * 3600000);
+}
+
+/* CICESE prints each monthly calendar on a single time meridian: standard time for
+   November through March, daylight time for April through October. Real daylight
+   saving in Baja California's border municipalities starts on the second Sunday of
+   March and ends on the first Sunday of November, so in those two transition months
+   the printed calendar can sit an hour behind actual civil time.
+
+   This app shows civil time (what a watch reads), so on those dates a printed CICESE
+   table will disagree by an hour. Only the two stations that observe daylight saving
+   are affected; Bahia de los Angeles and Loreto hold one offset all year. */
+function cicesePrintedDST(date) {
+  const m = date.getMonth();
+  return m >= 3 && m <= 9;          // April through October
+}
+
+function dstCautionDays(dates) {
+  const info = state.info;
+  if (!info || !info.harmonic || !info.observesDST) return [];
+  return dates.filter(d => isUSDST(d) !== cicesePrintedDST(d));
+}
+
+function dstCautionBar(days) {
+  if (!days.length) return "";
+  const fmt = d => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const range = days.length === 1 ? fmt(days[0])
+              : fmt(days[0]) + " to " + fmt(days[days.length - 1]);
+  return `<div class="card caution">
+    <span class="cico">!</span>
+    <span><b>Clock check, ${range}.</b> Times here are civil time, what your watch will read.
+    Daylight saving is in effect, but CICESE prints this month's calendar on standard time,
+    so a printed CICESE table will show these tides an hour earlier. Trust the times here.</span>
+  </div>`;
+}
+
+/* Instants of the principal moon phases, from Meeus "Astronomical Algorithms"
+   ch.49. The illumination model above is fine for drawing a disc but is hours out
+   on phase timing, which decides the wrong calendar day whenever a phase lands
+   near local midnight. This agrees with CICESE's published times to under a minute.
+   k counts lunations from 2000; kind is 0 new, 0.25 first, 0.5 full, 0.75 last. */
+function meeusPhaseJDE(k, kind) {
+  const T = k/1236.85, T2 = T*T, T3 = T2*T, T4 = T3*T, s = Math.sin, cos = Math.cos;
+  const JDE = 2451550.09766 + 29.530588861*k + 0.00015437*T2 - 0.000000150*T3 + 0.00000000073*T4;
+  const E  = 1 - 0.002516*T - 0.0000074*T2;
+  const M  = (2.5534 + 29.10535670*k - 0.0000014*T2 - 0.00000011*T3) * D2R_M;
+  const Mp = (201.5643 + 385.81693528*k + 0.0107582*T2 + 0.00001238*T3 - 0.000000058*T4) * D2R_M;
+  const F  = (160.7108 + 390.67050284*k - 0.0016118*T2 - 0.00000227*T3 + 0.000000011*T4) * D2R_M;
+  const Om = (124.7746 - 1.56375588*k + 0.0020672*T2 + 0.00000215*T3) * D2R_M;
+  let c;
+  if (kind === 0 || kind === 0.5) {
+    const a = kind === 0
+      ? [-0.40720, 0.17241, 0.01608, 0.01039, 0.00739, -0.00514, 0.00208]
+      : [-0.40614, 0.17302, 0.01614, 0.01043, 0.00734, -0.00515, 0.00209];
+    c = a[0]*s(Mp) + a[1]*E*s(M) + a[2]*s(2*Mp) + a[3]*s(2*F) + a[4]*E*s(Mp-M)
+      + a[5]*E*s(Mp+M) + a[6]*E*E*s(2*M)
+      - 0.00111*s(Mp-2*F) - 0.00057*s(Mp+2*F) + 0.00056*E*s(2*Mp+M)
+      - 0.00042*s(3*Mp) + 0.00042*E*s(M+2*F) + 0.00038*E*s(M-2*F)
+      - 0.00024*E*s(2*Mp-M) - 0.00017*s(Om) - 0.00007*s(Mp+2*M)
+      + 0.00004*s(2*Mp-2*F) + 0.00004*s(3*M) + 0.00003*s(Mp+M-2*F)
+      + 0.00003*s(2*Mp+2*F) - 0.00003*s(Mp+M+2*F) + 0.00003*s(Mp-M+2*F)
+      - 0.00002*s(Mp-M-2*F) - 0.00002*s(3*Mp+M) + 0.00002*s(4*Mp);
+  } else {
+    c = -0.62801*s(Mp) + 0.17172*E*s(M) - 0.01183*E*s(Mp+M) + 0.00862*s(2*Mp)
+      + 0.00804*s(2*F) + 0.00454*E*s(Mp-M) + 0.00204*E*E*s(2*M) - 0.00180*s(Mp-2*F)
+      - 0.00070*s(Mp+2*F) - 0.00040*s(3*Mp) - 0.00034*E*s(2*Mp-M) + 0.00032*E*s(M+2*F)
+      + 0.00032*E*s(M-2*F) - 0.00028*E*E*s(Mp+2*M) + 0.00027*E*s(2*Mp+M) - 0.00017*s(Om)
+      - 0.00005*s(Mp-M-2*F) + 0.00004*s(2*Mp+2*F) - 0.00004*s(Mp+M+2*F)
+      + 0.00004*s(Mp-2*M) + 0.00003*s(Mp+M-2*F) + 0.00003*s(3*M) + 0.00002*s(2*Mp-2*F)
+      + 0.00002*s(Mp-M+2*F) - 0.00002*s(3*Mp+M);
+    const W = 0.00306 - 0.00038*E*cos(M) + 0.00026*cos(Mp)
+            - 0.00002*cos(Mp-M) + 0.00002*cos(Mp+M) + 0.00002*cos(2*F);
+    c += (kind === 0.25 ? W : -W);
+  }
+  // Planetary arguments. A1 alone carries a quadratic term.
+  c += 0.000325 * s((299.77 + 0.107408*k - 0.009173*T2) * D2R_M);
+  const A = [[251.88,0.016321,0.000165],[251.83,26.651886,0.000164],
+             [349.42,36.412478,0.000126],[84.66,18.206239,0.000110],[141.74,53.303771,0.000062],
+             [207.14,2.453732,0.000060],[154.84,7.306860,0.000056],[34.52,27.261239,0.000047],
+             [207.19,0.121824,0.000042],[291.34,1.844379,0.000040],[161.72,24.198154,0.000037],
+             [239.56,25.513099,0.000035],[331.55,3.592518,0.000023]];
+  for (const [a0, a1, amp] of A) c += amp * s((a0 + a1*k) * D2R_M);
+  return JDE + c;
+}
+const DELTA_T_DAYS = 69 / 86400;                 // TT to UT, about 69 s in the 2020s
+function phaseInstant(k, kind) {
+  return new Date((meeusPhaseJDE(k, kind) - DELTA_T_DAYS - 2440587.5) * 86400000);
+}
+function lunationK(date) {
+  return ((date.getUTCFullYear() + (date.getUTCMonth() + 0.5)/12) - 2000) * 12.3685;
+}
+
+// The principal phase (new / quarters / full) falling on a given local day, if any.
+function principalPhaseFor(day) {
+  const t0 = stationUTC(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0);
+  const t1 = new Date(t0.getTime() + 86400000);
+  const kA = lunationK(t0);
+  for (const p of PHASES) {
+    for (let k = Math.floor(kA) - 1; k <= Math.ceil(kA) + 1; k++) {
+      const t = phaseInstant(k + p.v, p.v);
+      if (t >= t0 && t < t1) return p;
+    }
+  }
+  return null;
+}
+
+// Position within the current lunation (0 new, 0.5 full), from the accurate
+// new-moon instants either side of the given time.
+function lunationPhase(date) {
+  const kA = lunationK(date);
+  let prev = null, next = null;
+  for (let k = Math.floor(kA) - 2; k <= Math.ceil(kA) + 2; k++) {
+    const t = phaseInstant(k, 0);
+    if (t <= date && (!prev || t > prev)) prev = t;
+    if (t > date && (!next || t < next)) next = t;
+  }
+  if (!prev || !next) return MOON(date).phase;
+  return (date - prev) / (next - prev);
+}
+
+function phaseName(p) {
+  if (p < 0.02 || p >= 0.98) return "New moon";
+  if (p < 0.23) return "Waxing crescent";
+  if (p < 0.27) return "First quarter";
+  if (p < 0.48) return "Waxing gibbous";
+  if (p < 0.52) return "Full moon";
+  if (p < 0.73) return "Waning gibbous";
+  if (p < 0.77) return "Last quarter";
+  return "Waning crescent";
+}
+
+// Moon disc with a geometrically correct terminator: the filled part is the lit
+// part, so a full moon is a solid disc and a new moon is an empty outline.
+// Mirrored for southern-hemisphere stations, where the lit limb appears flipped.
+function moonDisc(phase, fraction, size, southern) {
+  const r = size/2 - 1, c = size/2, col = "#2D555F";
+  const ring = `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${col}" stroke-width="1.2"/>`;
+  let inner;
+  if (fraction >= 0.99) inner = `<circle cx="${c}" cy="${c}" r="${r}" fill="${col}"/>`;
+  else if (fraction <= 0.01) inner = "";
+  else {
+    const k = 1 - 2*fraction;                 // +1 at new, -1 at full
+    const rx = (Math.abs(k) * r).toFixed(2);
+    const waxing = phase < 0.5;
+    const outerSweep = waxing ? 1 : 0;        // lit limb: right when waxing
+    const innerSweep = waxing ? (k > 0 ? 0 : 1) : (k > 0 ? 1 : 0);
+    inner = `<path d="M${c} ${c-r} A${r} ${r} 0 0 ${outerSweep} ${c} ${c+r} A${rx} ${r} 0 0 ${innerSweep} ${c} ${c-r} Z" fill="${col}"/>`;
+  }
+  const body = ring + inner;
+  const content = southern ? `<g transform="translate(${size},0) scale(-1,1)">${body}</g>` : body;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">${content}</svg>`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Search UI
+ * ------------------------------------------------------------------ */
+const searchEl = document.getElementById("search");
+const resultsEl = document.getElementById("results");
+const locbtn = document.getElementById("locbtn");
+let searchTimer = null, activeIdx = -1, currentResults = [];
+
+searchEl.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(runSearch, 120);
+});
+searchEl.addEventListener("focus", () => { if (searchEl.value.trim()) runSearch(); });
+searchEl.addEventListener("keydown", e => {
+  if (!resultsEl.classList.contains("show")) return;
+  if (e.key === "ArrowDown") { activeIdx = Math.min(activeIdx+1, currentResults.length-1); paintActive(); e.preventDefault(); }
+  else if (e.key === "ArrowUp") { activeIdx = Math.max(activeIdx-1, 0); paintActive(); e.preventDefault(); }
+  else if (e.key === "Enter" && activeIdx >= 0) { selectStation(currentResults[activeIdx]); }
+  else if (e.key === "Escape") { hideResults(); }
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest(".searchwrap")) hideResults();
+});
+
+function hideResults() { resultsEl.classList.remove("show"); activeIdx = -1; }
+function paintActive() {
+  [...resultsEl.children].forEach((c,i) => c.classList.toggle("active", i===activeIdx));
+  const el = resultsEl.children[activeIdx];
+  if (el) el.scrollIntoView({ block: "nearest" });
+}
+
+const coordRe = /^\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*$/;
+
+async function runSearch() {
+  const q = searchEl.value.trim();
+  if (!q) { hideResults(); return; }
+  let stations;
+  try { stations = await provider.getStations(); }
+  catch (err) { showResultsHint("Could not load stations: " + err.message); return; }
+
+  const coord = q.match(coordRe);
+  if (coord) { renderResults(nearest(stations, parseFloat(coord[1]), parseFloat(coord[2]), 8), true); return; }
+  const ql = q.toLowerCase();
+  renderResults(stations.filter(s => (s.name + " " + s.state).toLowerCase().includes(ql)).slice(0, 40), false);
+}
+
+function nearest(stations, la, lo, n) {
+  return stations.map(s => ({ ...s, dist: haversine(la, lo, s.lat, s.lng) }))
+    .sort((a,b) => a.dist - b.dist).slice(0, n);
+}
+function showResultsHint(msg) {
+  resultsEl.innerHTML = '<div class="hint">' + msg + "</div>";
+  resultsEl.classList.add("show");
+}
+function renderResults(list, showDist) {
+  currentResults = list; activeIdx = list.length ? 0 : -1;
+  if (!list.length) { showResultsHint("No stations match that."); return; }
+  resultsEl.innerHTML = "";
+  list.forEach((s, i) => {
+    const div = document.createElement("div");
+    div.className = "result" + (i===0 ? " active" : "");
+    const meta = showDist
+      ? (s.dist < 1.6 ? "&lt;1 mi" : (s.dist*0.621371).toFixed(0) + " mi") + " · #" + s.id
+      : (s.state ? s.state + " · " : "") + "#" + s.id;
+    div.innerHTML = '<span class="nm">' + escapeHtml(s.name) + '</span><span class="meta">' + meta + "</span>";
+    div.addEventListener("click", () => selectStation(s));
+    resultsEl.appendChild(div);
+  });
+  resultsEl.classList.add("show");
+}
+
+locbtn.addEventListener("click", () => {
+  if (!navigator.geolocation) { alert("Geolocation is not available in this browser."); return; }
+  locbtn.textContent = "…";
+  navigator.geolocation.getCurrentPosition(async pos => {
+    locbtn.textContent = "📍";
+    try {
+      const stations = await provider.getStations();
+      searchEl.value = "";
+      renderResults(nearest(stations, pos.coords.latitude, pos.coords.longitude, 8), true);
+      searchEl.focus();
+    } catch (err) { alert("Could not find nearby stations: " + err.message); }
+  }, err => { locbtn.textContent = "📍"; alert("Location unavailable: " + err.message); },
+     { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 });
+});
+
+function selectStation(s) {
+  state.station = { id: s.id, name: s.name, state: s.state, lat: s.lat, lng: s.lng };
+  localStorage.setItem("tide.station", JSON.stringify(state.station));
+  searchEl.value = "";
+  hideResults();
+  hideFavMenu();
+  searchEl.blur();
+  updateFavUI();
+  render();
+}
+
+/* ------------------------------------------------------------------ *
+ * Favorites
+ * ------------------------------------------------------------------ */
+const favStar = document.getElementById("favstar");
+const favCaret = document.getElementById("favcaret");
+const favMenu = document.getElementById("favmenu");
+
+function loadFavs() {
+  try { const v = JSON.parse(localStorage.getItem("tide.favorites") || "[]"); return Array.isArray(v) ? v : []; }
+  catch (e) { return []; }
+}
+function saveFavs() { localStorage.setItem("tide.favorites", JSON.stringify(state.favorites)); }
+function isFav(id) { return state.favorites.some(f => f.id === id); }
+
+function toggleFav() {
+  if (!state.station) return;
+  const id = state.station.id;
+  if (isFav(id)) state.favorites = state.favorites.filter(f => f.id !== id);
+  else state.favorites = state.favorites.concat([{ ...state.station }]);
+  saveFavs();
+  updateFavUI();
+  if (favMenu.classList.contains("show")) renderFavMenu();
+}
+
+function removeFav(id) {
+  state.favorites = state.favorites.filter(f => f.id !== id);
+  saveFavs();
+  updateFavUI();
+  renderFavMenu();
+}
+
+function updateFavUI() {
+  const saved = state.station && isFav(state.station.id);
+  favStar.textContent = saved ? "★" : "☆";
+  favStar.classList.toggle("on", !!saved);
+  favStar.disabled = !state.station;
+  favStar.title = !state.station ? "Pick a station first"
+    : saved ? "Remove from favorites" : "Save this station";
+  const n = state.favorites.length;
+  favCaret.innerHTML = "▾" + (n ? `<span class="favcount">${n}</span>` : "");
+  favCaret.title = n ? n + " saved station" + (n>1?"s":"") : "No saved stations yet";
+}
+
+function renderFavMenu() {
+  if (!state.favorites.length) {
+    favMenu.innerHTML = '<div class="favempty">No saved stations yet. Find a station, then tap ☆ to keep it here.</div>';
+    return;
+  }
+  const rows = state.favorites.map(f => {
+    const cur = state.station && state.station.id === f.id;
+    return `<div class="favitem ${cur?"current":""}" data-id="${escapeHtml(f.id)}">
+        <span class="fnm">${escapeHtml(f.name)}
+          <span class="fmeta">${f.state ? escapeHtml(f.state) + " · " : ""}#${escapeHtml(f.id)}</span>
+        </span>
+        <button class="fdel" data-del="${escapeHtml(f.id)}" title="Remove">×</button>
+      </div>`;
+  }).join("");
+  favMenu.innerHTML = '<div class="favhead">Saved stations</div>' + rows;
+
+  favMenu.querySelectorAll(".favitem").forEach(el => {
+    el.onclick = ev => {
+      if (ev.target.closest(".fdel")) return;          // the × handles its own click
+      const f = state.favorites.find(x => x.id === el.dataset.id);
+      if (f) selectStation(f);
+    };
+  });
+  favMenu.querySelectorAll(".fdel").forEach(b => {
+    b.onclick = ev => { ev.stopPropagation(); removeFav(b.dataset.del); };
+  });
+}
+
+function hideFavMenu() { favMenu.classList.remove("show"); }
+
+favStar.addEventListener("click", toggleFav);
+favCaret.addEventListener("click", () => {
+  const showing = favMenu.classList.contains("show");
+  hideResults();
+  if (showing) { hideFavMenu(); return; }
+  renderFavMenu();
+  favMenu.classList.add("show");
+});
+document.addEventListener("click", e => { if (!e.target.closest(".favwrap")) hideFavMenu(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideFavMenu(); });
+
+/* ------------------------------------------------------------------ *
+ * Render dispatch
+ * ------------------------------------------------------------------ */
+const appEl = document.getElementById("app");
+
+async function render() {
+  if (!state.station) {
+    appEl.innerHTML = '<div class="empty"><div class="big">🌊</div>' +
+      "<div>Search for a coastal station above, or tap 📍 to find the nearest one.</div></div>";
+    return;
+  }
+  appEl.innerHTML = shell();
+  wireControls();
+  if (state.view === "calendar") await renderCalendar();
+  else if (state.view === "inund") await renderInundation();
+  else await renderDay();
+}
+
+function shell() {
+  const st = state.station;
+  const dayOn = state.view === "day" ? "on" : "";
+  const calOn = state.view === "calendar" ? "on" : "";
+  const inuOn = state.view === "inund" ? "on" : "";
+  const uEn = state.units === "english" ? "on" : "";
+  const uMe = state.units === "metric" ? "on" : "";
+
+  let viewControls;
+  if (state.view === "inund") {
+    const presets = RANGES.map(r =>
+      `<button data-range="${r.k}" class="${state.range===r.k?"on":""}">${r.label}</button>`).join("");
+    viewControls = `
+      <div class="left">
+        <span class="seglabel">Elevation</span>
+        <div class="elevbox">
+          <button class="stepbtn" id="elevDown">−</button>
+          <input id="elevInput" type="number" step="${state.units==="metric"?0.05:0.1}" value="${elevDisplay().toFixed(state.units==="metric"?2:1)}" />
+          <span class="eunit">${unitLabel()}</span>
+          <button class="stepbtn" id="elevUp">+</button>
+        </div>
+        <span class="seglabel">above ${datumName()}</span>
+        <div class="seg" id="focusSeg" style="margin-left:6px">
+          <button data-focus="sub" class="${state.focus!=="exp"?"on":""}">Inundated</button>
+          <button data-focus="exp" class="${state.focus==="exp"?"on":""}">Exposed</button>
+        </div>
+      </div>
+      <div class="right">
+        <div class="seg" id="rangeSeg">${presets}</div>
+        <div class="datenav">
+          <button class="navbtn" id="prevRange">‹</button>
+          <div class="day" id="rangeLabel">${rangeLabelText()}</div>
+          <button class="navbtn" id="nextRange">›</button>
+          <button class="todaybtn" id="rangeToday">Today</button>
+        </div>
+      </div>`;
+  } else if (state.view === "day") {
+    const spanBtns = [1,2,3,4,5,6,7].map(n =>
+      `<button data-days="${n}" class="${state.days===n?"on":""}">${n}</button>`).join("");
+    const rangeLabel = state.days === 1
+      ? fmtDayLabel(state.date)
+      : fmtDayLabel(state.date).replace("Today · ","") + " – " + fmtDayLabel(addDays(state.date, state.days-1)).replace("Today · ","");
+    viewControls = `
+      <div class="left">
+        <span class="seglabel">Span</span>
+        <div class="seg" id="daySeg">${spanBtns}</div>
+        <span class="seglabel" style="margin-left:4px">day${state.days>1?"s":""}</span>
+      </div>
+      <div class="right">
+        <div class="datenav">
+          <button class="navbtn" id="prevDay">‹</button>
+          <div class="day">${rangeLabel}</div>
+          <button class="navbtn" id="nextDay">›</button>
+          <button class="todaybtn" id="todayBtn">Today</button>
+        </div>
+      </div>`;
+  } else {
+    viewControls = `
+      <div class="left"></div>
+      <div class="right">
+        <div class="calnav">
+          <button class="navbtn" id="prevMon">‹</button>
+          <div class="mon">${state.month.toLocaleDateString(undefined,{month:"long",year:"numeric"})}</div>
+          <button class="navbtn" id="nextMon">›</button>
+          <button class="todaybtn" id="thisMonBtn">This month</button>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="stationhead">
+      <div>
+        <div class="name">${escapeHtml(st.name)}</div>
+        <div class="coords">${st.state ? escapeHtml(st.state) + " · " : ""}${st.lat.toFixed(3)}, ${st.lng.toFixed(3)} · Station #${st.id}${
+          String(st.id).startsWith("mx-")
+            ? `<button class="srcchip" id="srcChip" title="How these predictions are made">harmonic model</button>` : ""
+        }</div>
+      </div>
+      <div class="left" style="gap:12px">
+        <div class="seg" id="viewSeg">
+          <button data-view="day" class="${dayOn}">Day</button>
+          <button data-view="calendar" class="${calOn}">Calendar</button>
+          <button data-view="inund" class="${inuOn}">Inundation</button>
+        </div>
+        <div class="seg" id="unitSeg">
+          <button data-u="english" class="${uEn}">ft</button>
+          <button data-u="metric" class="${uMe}">m</button>
+        </div>
+      </div>
+    </div>
+    <div class="controlbar">${viewControls}</div>
+    <div id="content"><div class="status">Loading predictions…</div></div>
+  `;
+}
+
+function wireControls() {
+  document.querySelectorAll("#viewSeg button").forEach(b => b.onclick = () => {
+    state.view = b.dataset.view; localStorage.setItem("tide.view", state.view); render();
+  });
+  document.querySelectorAll("#unitSeg button").forEach(b => b.onclick = () => {
+    state.units = b.dataset.u; localStorage.setItem("tide.units", state.units); render();
+  });
+  const daySeg = document.getElementById("daySeg");
+  if (daySeg) daySeg.querySelectorAll("button").forEach(b => b.onclick = () => {
+    state.days = parseInt(b.dataset.days,10); localStorage.setItem("tide.days", state.days); render();
+  });
+  const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
+  bind("prevDay", () => { state.date = addDays(state.date, -state.days); render(); });
+  bind("nextDay", () => { state.date = addDays(state.date, state.days); render(); });
+  bind("todayBtn", () => { state.date = startOfToday(); render(); });
+  bind("prevMon", () => { state.month = addMonths(state.month, -1); render(); });
+  bind("nextMon", () => { state.month = addMonths(state.month, 1); render(); });
+  bind("thisMonBtn", () => { state.month = firstOfMonth(new Date()); render(); });
+
+  const chip = document.getElementById("srcChip");
+  if (chip) chip.onclick = openAbout;
+  const focusSeg = document.getElementById("focusSeg");
+  if (focusSeg) focusSeg.querySelectorAll("button").forEach(b => b.onclick = () => {
+    state.focus = b.dataset.focus; localStorage.setItem("tide.focus", state.focus); render();
+  });
+  const rangeSeg = document.getElementById("rangeSeg");
+  if (rangeSeg) rangeSeg.querySelectorAll("button").forEach(b => b.onclick = () => {
+    state.range = b.dataset.range; localStorage.setItem("tide.range", state.range); render();
+  });
+  bind("prevRange", () => { state.rangeStart = shiftRange(state.rangeStart, -1); render(); });
+  bind("nextRange", () => { state.rangeStart = shiftRange(state.rangeStart, 1); render(); });
+  bind("rangeToday", () => { state.rangeStart = defaultRangeStart(); render(); });
+  const ei = document.getElementById("elevInput");
+  if (ei) {
+    const commit = () => {
+      const v = parseFloat(ei.value);
+      if (!isNaN(v)) { setElevDisplay(v); render(); }
+    };
+    ei.onchange = commit;
+    ei.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); commit(); } };
+    const nudge = d => {
+      const stepv = state.units === "metric" ? 0.05 : 0.1;
+      setElevDisplay(Math.round((elevDisplay() + d*stepv) * 1000) / 1000);
+      render();
+    };
+    bind("elevUp", () => nudge(1));
+    bind("elevDown", () => nudge(-1));
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Day view (1..7 days)
+ * ------------------------------------------------------------------ */
+async function renderDay() {
+  const st = state.station;
+  const begin = state.date, end = addDays(state.date, state.days - 1);
+  const interval = state.days <= 2 ? "" : "h"; // 6-min for 1-2 days, hourly beyond
+  let pred;
+  try {
+    pred = await provider.getPredictions(st.id, ymd(begin), ymd(end), state.units, { series: true, interval });
+  } catch (err) {
+    document.getElementById("content").innerHTML =
+      '<div class="status err">Could not load predictions: ' + escapeHtml(err.message) + "</div>";
+    return;
+  }
+  const { hilo, series } = pred;
+  const content = document.getElementById("content");
+  if (!hilo.length && !series.length) {
+    content.innerHTML = '<div class="status">No predictions available for this range.</div>';
+    return;
+  }
+  const day0 = new Date(state.date); day0.setHours(0,0,0,0);
+
+  // Sunrise/sunset for each day in the span (from lat/lng, aligned to station clock).
+  let info, sun = [];
+  try {
+    info = state.info = await provider.getStationInfo(st.id);
+    for (let d = 0; d < state.days; d++) {
+      const day = addDays(day0, d);
+      sun.push(sunForDay(day, st.lat, st.lng, info));
+    }
+  } catch (e) { sun = []; }
+
+  const spanDays = [];
+  for (let d = 0; d < state.days; d++) spanDays.push(addDays(day0, d));
+
+  lastDayView = { hilo, day0, series };
+  content.innerHTML =
+    '<div id="tideCards">' + nextTideCard(hilo, day0, series) + '</div>' +
+    (state.days === 1 ? sunRow(sun[0]) : "") +
+    dstCautionBar(dstCautionDays(spanDays)) +
+    '<div class="card"><div class="chartwrap">' + chartSVG(series, hilo, day0, state.days, sun) + "</div></div>" +
+    tideTable(hilo, day0, sun);
+}
+
+/* Sun icon in a 21x18 box: a disc with eight rays, plus an arrow that points up for
+   sunrise and down for sunset. dir "none" drops the arrow and centres the disc.
+   Returned as bare geometry so the same shape serves both HTML and the chart SVG. */
+function sunGlyph(dir) {
+  const cx = dir === "none" ? 10.5 : 6.5, cy = 9;
+  const rays = [[0,-1],[0.707,-0.707],[1,0],[0.707,0.707],[0,1],[-0.707,0.707],[-1,0],[-0.707,-0.707]]
+    .map(([dx,dy]) => `M${(cx+dx*4.3).toFixed(2)} ${(cy+dy*4.3).toFixed(2)}L${(cx+dx*5.9).toFixed(2)} ${(cy+dy*5.9).toFixed(2)}`)
+    .join("");
+  let arrow = "";
+  if (dir !== "none") {
+    const head = dir === "up" ? "M14.6 7L17 4.5L19.4 7" : "M14.6 12L17 14.5L19.4 12";
+    arrow = `<path d="M17 4.5v10"/><path d="${head}"/>`;
+  }
+  return `<circle cx="${cx}" cy="${cy}" r="2.8" fill="currentColor" stroke="none"/><path d="${rays}"/>${arrow}`;
+}
+function sunIcon(dir, px, color) {
+  return `<svg viewBox="0 0 21 18" width="${px}" height="${(px*18/21).toFixed(1)}"
+      style="vertical-align:-3px;color:${color||"var(--amber-text)"}" aria-hidden="true">
+    <g stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">${sunGlyph(dir)}</g>
+  </svg>`;
+}
+
+function sunRow(s) {
+  if (!s) return "";
+  const moon = moonChip();
+  if (s.polar === "day")   return `<div class="card sunrow"><span>${sunIcon("none",19)} Sun up all day (no sunset)</span>${moon}</div>`;
+  if (s.polar === "night") return `<div class="card sunrow"><span>Sun down all day (no sunrise)</span>${moon}</div>`;
+  if (!s.sunrise || !s.sunset) return "";
+  return `<div class="card sunrow">
+    <span>${sunIcon("up",19)} Sunrise <b>${fmtTime(s.sunrise)}</b></span>
+    <span>${sunIcon("down",19)} Sunset <b>${fmtTime(s.sunset)}</b></span>
+    <span>${sunIcon("none",19,"var(--label)")} Daylight <b>${fmtDuration(s.daylightMin)}</b></span>
+    ${moon}
+  </div>`;
+}
+
+// Moon phase for the displayed day, shown alongside the sun times.
+function moonChip() {
+  const noon = stationUTC(state.date.getFullYear(), state.date.getMonth(), state.date.getDate(), 12, 0);
+  const phase = lunationPhase(noon);          // accurate; drives the name and orientation
+  const frac = MOON(noon).fraction;           // illuminated fraction for the readout
+  const southern = state.station && state.station.lat < 0;
+  return `<span class="moonchip">${moonDisc(phase, frac, 16, southern)}
+    <span>${phaseName(phase)} <b>${Math.round(frac*100)}%</b></span></span>`;
+}
+
+function nextTideCard(hilo, day0, series) {
+  const now = new Date();
+  const rangeEnd = addDays(day0, state.days);
+  const inRange = now >= day0 && now < rangeEnd;
+  const upcoming = inRange ? hilo.filter(h => h.time > now) : [];
+  const next = upcoming[0];
+  // The range is a property of the day, not of any one tide, so it is always shown.
+  // It leads as the hero only when there is no upcoming tide to lead with instead;
+  // otherwise it takes its own card so both numbers are visible at once.
+  // Take the extremes from the turning points AND the sampled curve together. Relying
+  // on the high/low list alone breaks on mixed-tide days where one turning point
+  // vanishes entirely (diurnal inequality), which left the range showing a dash even
+  // though the water plainly rose and fell.
+  const pts = hilo.concat(series || []);
+  let hi = null, lo = null;
+  for (const p of pts) {
+    if (!hi || p.height > hi.height) hi = p;
+    if (!lo || p.height < lo.height) lo = p;
+  }
+  // Derive the range from the rounded endpoints, not the raw ones. A true range of
+  // 5.53 displays as 5.5 while its endpoints display as 1.2 and 6.8, and a reader
+  // subtracting what is on screen gets 5.6. Losing half a display unit of precision
+  // is a far smaller sin than printing three numbers that do not add up.
+  const hiR = hi ? parseFloat(fmtHeight(hi.height)) : null;
+  const loR = lo ? parseFloat(fmtHeight(lo.height)) : null;
+  const spread = (hiR !== null && loR !== null) ? fmtHeight(hiR - loR) : null;
+  const rangeLabel = state.days > 1 ? "Range over " + state.days + " days" : "Range this day";
+  const rangeBody = `
+      <div class="big range">${spread ? spread + " " + unitLabel() : "–"}</div>
+      <div class="small">${lo?fmtHeight(lo.height):"–"} → ${hi?fmtHeight(hi.height):"–"} ${unitLabel()}<br>
+        lowest ${lo?fmtTime(lo.time):""} · highest ${hi?fmtTime(hi.time):""}</div>`;
+
+  let hero, rangeCard = "";
+  if (next) {
+    const mins = Math.round((next.time - now)/60000);
+    const rel = mins < 60 ? mins + " min" : Math.floor(mins/60) + "h " + (mins%60) + "m";
+    hero = `<div class="nextcard hero">
+      <div class="lab">Next ${next.type === "H" ? "high" : "low"} tide</div>
+      <div class="big">${fmtTime(next.time)}</div>
+      <div class="small">${fmtHeight(next.height)} ${unitLabel()} · in ${rel}${state.days>1?" · "+next.time.toLocaleDateString(undefined,{weekday:"short"}):""}</div>
+    </div>`;
+    rangeCard = `<div class="nextcard rangecard"><div class="lab">${rangeLabel}</div>${rangeBody}</div>`;
+  } else {
+    hero = `<div class="nextcard hero"><div class="lab">${rangeLabel}</div>${rangeBody}</div>`;
+  }
+  // Per-event summary cards only in single-day view (multi-day would be too many).
+  let cells = "";
+  if (state.days === 1) {
+    cells = hilo.map(h => `
+      <div class="nextcard">
+        <div class="lab"><span class="pill ${h.type==="H"?"high":"low"}">${h.type==="H"?"High":"Low"}</span></div>
+        <div class="big">${fmtTime(h.time)}</div>
+        <div class="small">${fmtHeight(h.height)} ${unitLabel()}</div>
+      </div>`).join("");
+  }
+  return '<div class="card"><div class="nextgrid">' + hero + cells + rangeCard + "</div></div>";
+}
+
+function chartSVG(series, hilo, day0, totalDays, sun) {
+  const W = 900, H = 300, padL = 44, padR = 16, padT = 22, padB = 34;
+  const detailed = totalDays === 1;
+  const pts = series.length ? series : hilo.map(h => ({ time: h.time, height: h.height }));
+  if (!pts.length) return "";
+
+  const totalMs = totalDays * 24 * 3600 * 1000;
+  const xOf = t => padL + ((t - day0) / totalMs) * (W - padL - padR);
+  const clampX = x => Math.max(padL, Math.min(W - padR, x));
+  const heights = pts.map(p => p.height).concat(hilo.map(h=>h.height));
+  let hMin = Math.min(...heights), hMax = Math.max(...heights);
+  const span = Math.max(hMax - hMin, 0.5);
+  hMin -= span*0.15; hMax += span*0.18;
+  const yOf = v => padT + (1 - (v - hMin)/(hMax - hMin)) * (H - padT - padB);
+
+  const line = pts.map((p,i) => (i?"L":"M") + xOf(p.time).toFixed(1) + " " + yOf(p.height).toFixed(1)).join(" ");
+  const area = "M" + xOf(pts[0].time).toFixed(1) + " " + (H-padB) + " " +
+    pts.map(p => "L" + xOf(p.time).toFixed(1) + " " + yOf(p.height).toFixed(1)).join(" ") +
+    " L" + xOf(pts[pts.length-1].time).toFixed(1) + " " + (H-padB) + " Z";
+
+  // Y gridlines
+  let grid = "";
+  niceTicks(hMin, hMax, 4).forEach(v => {
+    const y = yOf(v).toFixed(1);
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#e6eae3"/>`;
+    grid += `<text x="${padL-8}" y="${(+y+4)}" text-anchor="end" font-size="11" fill="#6d7773">${v.toFixed(state.units==="metric"?1:0)}</text>`;
+  });
+
+  // X axis: day boundaries always; hour ticks only for single day.
+  let xlab = "";
+  for (let d = 0; d <= totalDays; d++) {
+    const bx = (padL + (d/totalDays)*(W-padL-padR));
+    xlab += `<line x1="${bx.toFixed(1)}" y1="${padT}" x2="${bx.toFixed(1)}" y2="${H-padB}" stroke="${d===0||d===totalDays?"#e6eae3":"#cfd8cf"}"/>`;
+    if (d < totalDays) {
+      const dayDate = addDays(day0, d);
+      const cx = (padL + ((d+0.5)/totalDays)*(W-padL-padR));
+      const lbl = totalDays === 1
+        ? "" // hour ticks handle labels below
+        : dayDate.toLocaleDateString(undefined,{weekday:"short", day:"numeric"});
+      if (lbl) xlab += `<text x="${cx.toFixed(1)}" y="${H-padB+18}" text-anchor="middle" font-size="11" font-weight="700" fill="#6d7d78">${lbl}</text>`;
+    }
+  }
+  if (totalDays === 1) {
+    [0,6,12,18,24].forEach(h => {
+      const x = (padL + (h/24)*(W-padL-padR)).toFixed(1);
+      if (h!==0 && h!==24) xlab += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${H-padB}" stroke="#eef1ec"/>`;
+      const lbl = h===0?"12a":h===12?"12p":h<12?h+"a":(h-12)+"p";
+      if (h<24) xlab += `<text x="${x}" y="${H-padB+18}" text-anchor="middle" font-size="11" fill="#6d7773">${lbl}</text>`;
+    });
+  }
+
+  // Hi/lo markers. Full labels only in detailed (single-day) mode.
+  let marks = "";
+  hilo.forEach(h => {
+    const x = xOf(h.time), y = yOf(h.height);
+    const col = h.type==="H" ? "#BE7828" : "#2D555F";
+    const colText = h.type==="H" ? "#A56823" : "#2D555F";
+    marks += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${detailed?4.5:3.5}" fill="${col}"/>`;
+    if (detailed) {
+      const above = h.type==="H";
+      marks += `<text x="${x.toFixed(1)}" y="${(y+(above?-12:20)).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="700" fill="${colText}">${fmtTime(h.time)}</text>`;
+      marks += `<text x="${x.toFixed(1)}" y="${(y+(above?-26:33)).toFixed(1)}" text-anchor="middle" font-size="10" fill="#6d7773">${fmtHeight(h.height)} ${unitLabel()}</text>`;
+    }
+  });
+
+  // Night shading + sunrise/sunset markers
+  let night = "", sunmarks = "";
+  if (sun && sun.length) {
+    for (let d = 0; d < totalDays; d++) {
+      const s = sun[d]; if (!s) continue;
+      const dStart = addDays(day0, d), dEnd = addDays(day0, d+1);
+      const y0 = padT, yH = H - padB - padT;
+      if (s.polar === "night") {
+        night += `<rect x="${clampX(xOf(dStart)).toFixed(1)}" y="${y0}" width="${(xOf(dEnd)-xOf(dStart)).toFixed(1)}" height="${yH}" fill="#2D555F" opacity="0.08"/>`;
+        continue;
+      }
+      if (s.polar === "day" || !s.sunrise || !s.sunset) continue;
+      const xsr = clampX(xOf(s.sunrise)), xss = clampX(xOf(s.sunset));
+      night += `<rect x="${clampX(xOf(dStart)).toFixed(1)}" y="${y0}" width="${(xsr-clampX(xOf(dStart))).toFixed(1)}" height="${yH}" fill="#2D555F" opacity="0.06"/>`;
+      night += `<rect x="${xss.toFixed(1)}" y="${y0}" width="${(clampX(xOf(dEnd))-xss).toFixed(1)}" height="${yH}" fill="#2D555F" opacity="0.06"/>`;
+      const sunLine = (x, dir, label) =>
+        `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${H-padB}" stroke="#BE7828" stroke-width="1" opacity="0.5"/>` +
+        `<g transform="translate(${(x-6.6).toFixed(1)},${padT-20}) scale(0.63)" color="#A56823"
+            stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">${sunGlyph(dir)}</g>` +
+        (detailed ? `<text x="${x.toFixed(1)}" y="${padT+9}" text-anchor="middle" font-size="10" fill="#A56823" font-weight="700">${label}</text>` : "");
+      sunmarks += sunLine(xsr, "up", fmtTimeShort(s.sunrise));
+      sunmarks += sunLine(xss, "down", fmtTimeShort(s.sunset));
+    }
+  }
+
+  // Now line
+  let nowline = "";
+  const now = new Date();
+  if (now >= day0 && now < addDays(day0, totalDays)) {
+    const x = xOf(now).toFixed(1);
+    nowline = `<line x1="${x}" y1="${padT}" x2="${x}" y2="${H-padB}" stroke="#a23b2f" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="${x}" y="${padT-7}" text-anchor="middle" font-size="10" fill="#a23b2f" font-weight="700">now</text>`;
+  }
+
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Tide curve">
+    <defs>
+      <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#82A08C" stop-opacity="0.35"/>
+        <stop offset="1" stop-color="#82A08C" stop-opacity="0.03"/>
+      </linearGradient>
+    </defs>
+    ${night}${xlab}${grid}
+    <path d="${area}" fill="url(#fill)"/>
+    <path d="${line}" fill="none" stroke="#2D555F" stroke-width="${detailed?2.5:2}" stroke-linejoin="round" stroke-linecap="round"/>
+    ${sunmarks}${marks}${nowline}
+  </svg>`;
+}
+
+function niceTicks(min, max, count) {
+  const raw = (max - min) / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag;
+  const out = [];
+  for (let v = Math.ceil(min/step)*step; v <= max; v += step) out.push(v);
+  return out;
+}
+
+function tideTable(hilo, day0, sun) {
+  if (!hilo.length) return "";
+  let rows = "", lastDay = null;
+  hilo.forEach(h => {
+    const dayKey = ymd(h.time);
+    if (state.days > 1 && dayKey !== lastDay) {
+      let sunTxt = "";
+      if (sun && day0) {
+        const idx = Math.round((new Date(h.time.getFullYear(), h.time.getMonth(), h.time.getDate()) - day0) / 86400000);
+        const s = sun[idx];
+        if (s && s.sunrise && s.sunset) sunTxt = ` <span style="font-weight:400;color:var(--label)">· ${sunIcon("up",14)} ${fmtTimeShort(s.sunrise)} · ${sunIcon("down",14)} ${fmtTimeShort(s.sunset)}</span>`;
+        else if (s && s.polar === "day") sunTxt = ` <span style="font-weight:400;color:var(--label)">· ${sunIcon("none",14)} up all day</span>`;
+        else if (s && s.polar === "night") sunTxt = ` <span style="font-weight:400;color:var(--label)">· down all day</span>`;
+      }
+      rows += `<tr class="dayrow"><td colspan="3">${h.time.toLocaleDateString(undefined,{weekday:"long", month:"short", day:"numeric"})}${sunTxt}</td></tr>`;
+      lastDay = dayKey;
+    }
+    rows += `<tr>
+      <td><span class="pill ${h.type==="H"?"high":"low"}">${h.type==="H"?"High":"Low"}</span></td>
+      <td>${fmtTime(h.time)}</td>
+      <td class="h">${fmtHeight(h.height)} ${unitLabel()}</td>
+    </tr>`;
+  });
+  return `<div class="card"><table class="tides">
+    <thead><tr><th>Tide</th><th>Time</th><th>Height</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Inundation view: how long a given shore elevation spends submerged
+ * versus exposed over a date range, split into daylight and darkness.
+ *
+ * Sampling is 6-minute for both data sources. That is NOAA's native prediction
+ * interval, so a NOAA station and a harmonic station are measured the same way and
+ * their numbers are directly comparable. Threshold crossings are located by linear
+ * interpolation inside each 6-minute step, which is accurate because the tide curve
+ * is smooth; the only thing it cannot see is an excursion shorter than one step,
+ * which by definition barely crosses the threshold and contributes negligible time.
+ * ------------------------------------------------------------------ */
+const SAMPLE_MIN = 6;
+
+async function fetchLevelSeries(st, begin, end, units) {
+  const times = [], vals = [];
+  if (String(st.id).startsWith("mx-")) {
+    const hs = HarmonicProvider._st(st.id);
+    const nDays = Math.round((end - begin) / 86400000) + 1;
+    const per = 1440 / SAMPLE_MIN;
+    for (let d = 0; d < nDays; d++) {
+      const day = addDays(begin, d);
+      const lv = mxDayLevels(hs, day, SAMPLE_MIN, per);
+      for (let i = 0; i < per; i++) {
+        times.push(new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, i * SAMPLE_MIN));
+        vals.push(units === "metric" ? lv[i] / 100 : lv[i] / 30.48);
+      }
+    }
+    return { times, vals };
+  }
+  const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter" +
+    "?product=predictions&application=DrewTideApp&datum=MLLW&time_zone=lst_ldt&format=json" +
+    "&units=" + units + "&station=" + encodeURIComponent(st.id) +
+    "&begin_date=" + ymd(begin) + "&end_date=" + ymd(end);
+  const r = await fetch(url);
+  const j = await r.json();
+  if (j.error) throw new Error(j.error.message || "No predictions for this range.");
+  for (const p of (j.predictions || [])) {
+    const [dp, tp] = p.t.split(" ");
+    const [Y, M, D] = dp.split("-").map(Number);
+    const [h, mi] = tp.split(":").map(Number);
+    times.push(new Date(Y, M - 1, D, h, mi));
+    vals.push(parseFloat(p.v));
+  }
+  if (!times.length) throw new Error("No predictions returned for this range.");
+  return { times, vals };
+}
+
+function computeInundation(series, thr, st, info) {
+  const { times, vals } = series;
+  const sunCache = new Map();
+  // Daylight window (sunrise to sunset) for the local day containing t, as [ms, ms].
+  // null means the sun is down all day; a full-day span means it never sets.
+  function dayWindow(t) {
+    const key = ymd(t);
+    if (!sunCache.has(key)) {
+      const d = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+      const s = info ? sunForDay(d, st.lat, st.lng, info) : null;
+      let win = null;
+      if (s && s.polar === "day") win = [d.getTime(), d.getTime() + 86400000];
+      else if (s && s.polar !== "night" && s.sunrise && s.sunset) win = [s.sunrise.getTime(), s.sunset.getTime()];
+      sunCache.set(key, win);
+    }
+    return sunCache.get(key);
+  }
+  const overlap = (a, b, w) => w ? Math.max(0, Math.min(b, w[1]) - Math.max(a, w[0])) : 0;
+
+  let subMs = 0, subDayMs = 0, expMs = 0, expDayMs = 0;
+  const perDay = new Map();
+  // Runs are tracked for both states so either framing can report event counts and
+  // a longest continuous window.
+  const runs = { sub: [], exp: [] };
+  let cur = null;                                  // { submerged, start }
+
+  function newRec(t) {
+    return { key: ymd(t), date: new Date(t), expMs: 0, expDayMs: 0, subMs: 0, subDayMs: 0,
+             expEvents: 0, subEvents: 0, longestExpMs: 0, longestSubMs: 0 };
+  }
+  function bucket(a, b, submerged) {
+    if (b <= a) return;
+    const dayMs = overlap(a, b, dayWindow(new Date(a)));
+    const dur = b - a;
+    if (submerged) { subMs += dur; subDayMs += dayMs; }
+    else { expMs += dur; expDayMs += dayMs; }
+    const key = ymd(new Date(a));
+    let rec = perDay.get(key);
+    if (!rec) { rec = newRec(new Date(a)); perDay.set(key, rec); }
+    if (submerged) { rec.subMs += dur; rec.subDayMs += dayMs; }
+    else { rec.expMs += dur; rec.expDayMs += dayMs; }
+  }
+  function mark(t, submerged) {
+    if (cur && cur.submerged === submerged) return;
+    if (cur) runs[cur.submerged ? "sub" : "exp"].push({ start: cur.start, end: t, ms: t - cur.start });
+    cur = { submerged, start: t };
+  }
+
+  for (let i = 0; i < times.length - 1; i++) {
+    const t0 = times[i].getTime(), t1 = times[i + 1].getTime();
+    if (t1 - t0 > SAMPLE_MIN * 60000 * 3) continue;      // gap in the source data
+    const h0 = vals[i], h1 = vals[i + 1];
+    const s0 = h0 >= thr, s1 = h1 >= thr;
+    if (s0 === s1) {
+      bucket(t0, t1, s0);
+      mark(t0, s0);
+    } else {
+      const frac = (thr - h0) / (h1 - h0);
+      const tc = t0 + frac * (t1 - t0);
+      bucket(t0, tc, s0);
+      bucket(tc, t1, s1);
+      mark(t0, s0);
+      mark(tc, s1);
+    }
+  }
+  if (cur) {
+    const last = times[times.length - 1].getTime();
+    runs[cur.submerged ? "sub" : "exp"].push({ start: cur.start, end: last, ms: last - cur.start, open: true });
+  }
+  for (const which of ["sub", "exp"]) {
+    for (const ev of runs[which]) {
+      // Count each window once, on the day it begins, so totals do not double count.
+      const startRec = perDay.get(ymd(new Date(ev.start)));
+      if (startRec) startRec[which === "sub" ? "subEvents" : "expEvents"]++;
+      // But a window straddling midnight is still the relevant window on both days,
+      // so the longest is credited at full length to every day it touches. Otherwise
+      // a day whose exposure is entirely a continuation reports none at all.
+      let d = new Date(ev.start); d.setHours(0, 0, 0, 0);
+      const field = which === "sub" ? "longestSubMs" : "longestExpMs";
+      while (d.getTime() <= ev.end) {
+        const rec = perDay.get(ymd(d));
+        if (rec) rec[field] = Math.max(rec[field], ev.ms);
+        d = addDays(d, 1);
+      }
+    }
+  }
+  const totalMs = subMs + expMs;
+  const pick = arr => arr.reduce((a, b) => (!a || b.ms > a.ms) ? b : a, null);
+  return {
+    totalMs, subMs, expMs, subDayMs, subNightMs: subMs - subDayMs,
+    expDayMs, expNightMs: expMs - expDayMs,
+    subRuns: runs.sub, expRuns: runs.exp,
+    longestSub: pick(runs.sub), longestExp: pick(runs.exp),
+    perDay: [...perDay.values()].sort((a, b) => a.date - b.date)
+  };
+}
+
+function fmtSpan(ms) {
+  const mins = Math.round(ms / 60000);
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h >= 48) return (h / 24).toFixed(1) + " d";
+  return h + "h " + String(m).padStart(2, "0") + "m";
+}
+const pct = (a, b) => b > 0 ? (100 * a / b).toFixed(1) + "%" : "–";
+
+async function renderInundation() {
+  const st = state.station;
+  if (!state.rangeStart) state.rangeStart = defaultRangeStart();
+  const [begin, end] = rangeBounds();
+  const content = document.getElementById("content");
+  content.innerHTML = '<div class="status">Computing water levels…</div>';
+
+  let info = null;
+  try { info = state.info = await provider.getStationInfo(st.id); } catch (e) { /* sun optional */ }
+
+  let series;
+  try { series = await fetchLevelSeries(st, begin, end, state.units); }
+  catch (err) {
+    content.innerHTML = '<div class="status err">Could not load predictions: ' + escapeHtml(err.message) + "</div>";
+    return;
+  }
+  const thr = elevDisplay();
+  const res = computeInundation(series, thr, st, info);
+  lastInund = { res, st, thr, begin, end };
+
+  const u = unitLabel();
+  // The focus toggle only changes which side of the same computation leads; both
+  // sets of numbers exist either way, and the CSV always carries both.
+  const F = focusTerms(res);
+  const cards = `<div class="card"><div class="nextgrid">
+      <div class="nextcard hero">
+        <div class="lab">${F.noun}</div>
+        <div class="big range">${fmtSpan(F.ms)}</div>
+        <div class="small">${pct(F.ms, res.totalMs)} of range, at ${thr.toFixed(state.units==="metric"?2:1)} ${u}</div>
+      </div>
+      <div class="nextcard">
+        <div class="lab"><span class="pill low">${F.otherNoun}</span></div>
+        <div class="big range">${fmtSpan(F.otherMs)}</div>
+        <div class="small">${pct(F.otherMs, res.totalMs)} of the range</div>
+      </div>
+      <div class="nextcard">
+        <div class="lab"><span class="pill high">${F.adj} in daylight</span></div>
+        <div class="big range">${fmtSpan(F.dayMs)}</div>
+        <div class="small">${pct(F.dayMs, F.ms)} of ${F.nounLower}</div>
+      </div>
+      <div class="nextcard">
+        <div class="lab"><span class="pill low">${F.adj} at night</span></div>
+        <div class="big range">${fmtSpan(F.nightMs)}</div>
+        <div class="small">${pct(F.nightMs, F.ms)} of ${F.nounLower}</div>
+      </div>
+      <div class="nextcard">
+        <div class="lab">Longest single ${F.eventWord}</div>
+        <div class="big range">${F.longest ? fmtSpan(F.longest.ms) : "–"}</div>
+        <div class="small">${F.longest ? new Date(F.longest.start).toLocaleDateString(undefined,{month:"short",day:"numeric"}) + " " + fmtTime(new Date(F.longest.start)) : "never " + F.adj.toLowerCase()}</div>
+      </div>
+    </div></div>`;
+
+  const nDays = res.perDay.length;
+  const chart = nDays <= 7
+    ? '<div class="card"><div class="chartwrap">' + inundCurve(series, thr, res, st, info, begin, nDays) + "</div></div>"
+    : '<div class="card"><div class="chartwrap">' + inundBars(res) + "</div></div>";
+
+  content.innerHTML = cards + chart + inundTable(res) + `
+    <div class="calnote">
+      ${F.noun} means the predicted water level is ${state.focus === "exp" ? "below" : "at or above"}
+      ${thr.toFixed(state.units==="metric"?2:1)} ${u} above ${datumName()}.
+      Daylight is sunrise to sunset at this site. Sampled every ${SAMPLE_MIN} minutes with crossings interpolated.
+      <button class="csvbtn" id="csvBtn">Download CSV</button>
+    </div>`;
+  const cb = document.getElementById("csvBtn");
+  if (cb) cb.onclick = exportInundCSV;
+}
+
+// Vocabulary and figures for whichever side of the waterline the user is focused on.
+function focusTerms(res) {
+  return state.focus === "exp"
+    ? { key: "exp", noun: "Exposed", nounLower: "exposure", adj: "Exposed", eventWord: "exposure",
+        otherNoun: "Inundated", ms: res.expMs, otherMs: res.subMs,
+        dayMs: res.expDayMs, nightMs: res.expNightMs, longest: res.longestExp,
+        barColorDay: "#BE7828", barColorNight: "#2D555F" }
+    : { key: "sub", noun: "Inundated", nounLower: "inundation", adj: "Inundated", eventWord: "inundation",
+        otherNoun: "Exposed", ms: res.subMs, otherMs: res.expMs,
+        dayMs: res.subDayMs, nightMs: res.subNightMs, longest: res.longestSub,
+        barColorDay: "#BE7828", barColorNight: "#2D555F" };
+}
+
+let lastInund = null;
+
+function inundCurve(series, thr, res, st, info, begin, nDays) {
+  const W = 900, H = 300, padL = 46, padR = 14, padT = 18, padB = 30;
+  const { times, vals } = series;
+  const t0 = new Date(begin.getFullYear(), begin.getMonth(), begin.getDate()).getTime();
+  const totalMs = nDays * 86400000;
+  const xOf = t => padL + ((t - t0) / totalMs) * (W - padL - padR);
+  let lo = Math.min(...vals, thr), hi = Math.max(...vals, thr);
+  const span = Math.max(hi - lo, 0.5); lo -= span * 0.12; hi += span * 0.12;
+  const yOf = v => padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB);
+
+  let line = "", area = "M" + xOf(times[0].getTime()).toFixed(1) + " " + (H - padB);
+  for (let i = 0; i < times.length; i++) {
+    const x = xOf(times[i].getTime()).toFixed(1), y = yOf(vals[i]).toFixed(1);
+    line += (i ? "L" : "M") + x + " " + y + " ";
+    area += "L" + x + " " + y + " ";
+  }
+  area += "L" + xOf(times[times.length - 1].getTime()).toFixed(1) + " " + (H - padB) + " Z";
+
+  // Shade each window of whichever state is in focus.
+  let bands = "";
+  for (const ev of (state.focus === "exp" ? res.expRuns : res.subRuns)) {
+    const a = xOf(ev.start), b = xOf(ev.end);
+    if (b <= a) continue;
+    bands += `<rect x="${a.toFixed(1)}" y="${padT}" width="${(b-a).toFixed(1)}" height="${H-padT-padB}" fill="#BE7828" opacity="0.10"/>`;
+  }
+  let grid = "";
+  niceTicks(lo, hi, 4).forEach(v => {
+    const y = yOf(v).toFixed(1);
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#e6eae3"/>`;
+    grid += `<text x="${padL-8}" y="${(+y+4)}" text-anchor="end" font-size="11" fill="#6d7773">${v.toFixed(state.units==="metric"?1:0)}</text>`;
+  });
+  let dayl = "";
+  for (let d = 0; d <= nDays; d++) {
+    const x = (padL + (d/nDays)*(W-padL-padR)).toFixed(1);
+    dayl += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${H-padB}" stroke="#cfd8cf"/>`;
+    if (d < nDays) {
+      const dd = addDays(begin, d);
+      dayl += `<text x="${(padL + ((d+0.5)/nDays)*(W-padL-padR)).toFixed(1)}" y="${H-padB+16}" text-anchor="middle" font-size="11" fill="#6d7d78">${dd.toLocaleDateString(undefined,{weekday:"short",day:"numeric"})}</text>`;
+    }
+  }
+  const ty = yOf(thr).toFixed(1);
+  const thrLine = `<line x1="${padL}" y1="${ty}" x2="${W-padR}" y2="${ty}" stroke="#1668B8" stroke-width="1.6" stroke-dasharray="6 3"/>
+    <text x="${W-padR-4}" y="${(+ty-6)}" text-anchor="end" font-size="11" font-weight="700" fill="#1668B8">${thr.toFixed(state.units==="metric"?2:1)} ${unitLabel()}</text>`;
+
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Water level against threshold">
+    <defs><linearGradient id="ifill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#82A08C" stop-opacity="0.30"/><stop offset="1" stop-color="#82A08C" stop-opacity="0.03"/>
+    </linearGradient></defs>
+    ${bands}${dayl}${grid}
+    <path d="${area}" fill="url(#ifill)"/>
+    <path d="${line}" fill="none" stroke="#2D555F" stroke-width="1.8" stroke-linejoin="round"/>
+    ${thrLine}
+  </svg>`;
+}
+
+function inundBars(res) {
+  const W = 900, H = 270, padL = 40, padR = 12, padT = 26, padB = 42;
+  const n = res.perDay.length;
+  const bw = (W - padL - padR) / n;
+  const yOf = h => padT + (1 - h/24) * (H - padT - padB);
+  const sub = state.focus !== "exp";
+  let bars = "";
+  res.perDay.forEach((d, i) => {
+    const x = padL + i*bw;
+    const dayH = (sub ? d.subDayMs : d.expDayMs)/3600000;
+    const nightH = ((sub ? d.subMs : d.expMs) - (sub ? d.subDayMs : d.expDayMs))/3600000;
+    const w = Math.max(bw - (bw > 4 ? 1 : 0), 0.6);
+    const yD = yOf(dayH);
+    bars += `<rect x="${x.toFixed(2)}" y="${yD.toFixed(1)}" width="${w.toFixed(2)}" height="${(H-padB-yD).toFixed(1)}" fill="#BE7828" opacity="0.85"/>`;
+    const yN = yOf(dayH + nightH);
+    bars += `<rect x="${x.toFixed(2)}" y="${yN.toFixed(1)}" width="${w.toFixed(2)}" height="${(yD-yN).toFixed(1)}" fill="#2D555F" opacity="0.7"/>`;
+  });
+  let grid = "";
+  [0, 6, 12, 18, 24].forEach(h => {
+    const y = yOf(h).toFixed(1);
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#e6eae3"/>`;
+    grid += `<text x="${padL-8}" y="${(+y+4)}" text-anchor="end" font-size="11" fill="#6d7773">${h}h</text>`;
+  });
+  // Month dividers, plus day numbers when the range is short enough to read them.
+  let ticks = "";
+  let lastMon = null, lastYear = null;
+  res.perDay.forEach((d, i) => {
+    const mon = d.date.getMonth();
+    if (mon === lastMon) return;
+    const x = padL + i*bw;
+    if (i > 0) ticks += `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${H-padB}" stroke="#cfd8cf"/>`;
+    const showYear = d.date.getFullYear() !== lastYear;
+    const label = d.date.toLocaleDateString(undefined, showYear ? { month: "short", year: "numeric" } : { month: "short" });
+    ticks += `<text x="${(x+3).toFixed(1)}" y="${H-padB+30}" font-size="11" font-weight="700" fill="#6d7d78">${label}</text>`;
+    lastMon = mon; lastYear = d.date.getFullYear();
+  });
+  if (n <= 62) {
+    const stepD = Math.max(1, Math.ceil(n / 12));
+    res.perDay.forEach((d, i) => {
+      if (i % stepD) return;
+      ticks += `<text x="${(padL + i*bw + bw/2).toFixed(1)}" y="${H-padB+15}" text-anchor="middle" font-size="10" fill="#6d7773">${d.date.getDate()}</text>`;
+    });
+  }
+  const word = sub ? "inundated" : "exposed";
+  const legend = `<text x="${W-padR}" y="${padT-10}" text-anchor="end" font-size="11" fill="#6d7d78">
+      <tspan fill="#BE7828" font-weight="700">■</tspan> ${word} in daylight
+      <tspan fill="#2D555F" font-weight="700" dx="12">■</tspan> ${word} at night
+    </text>`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Daily ${word} hours">
+    ${grid}${ticks}${bars}${legend}
+  </svg>`;
+}
+
+function inundTable(res) {
+  const sub = state.focus !== "exp";
+  const noun = sub ? "Inundated" : "Exposed";
+  const other = sub ? "Exposed" : "Inundated";
+  const rows = res.perDay.map(d => {
+    const main = sub ? d.subMs : d.expMs;
+    const mainDay = sub ? d.subDayMs : d.expDayMs;
+    const longest = sub ? d.longestSubMs : d.longestExpMs;
+    return `<tr>
+      <td>${d.date.toLocaleDateString(undefined,{weekday:"short", month:"short", day:"numeric"})}</td>
+      <td class="h">${fmtSpan(main)}</td>
+      <td class="h">${fmtSpan(mainDay)}</td>
+      <td class="h">${fmtSpan(main - mainDay)}</td>
+      <td class="h">${fmtSpan(sub ? d.expMs : d.subMs)}</td>
+      <td class="h">${longest ? fmtSpan(longest) : "–"}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="card"><div class="tablescroll"><table class="tides">
+    <thead><tr><th>Date</th><th>${noun}</th><th>${noun} day</th><th>${noun} night</th><th>${other}</th><th>Longest ${sub?"inundation":"exposure"}</th></tr></thead>
+    <tbody>${rows}</tbody></table></div></div>`;
+}
+
+function exportInundCSV() {
+  if (!lastInund) return;
+  const { res, st, thr, begin, end } = lastInund;
+  const u = unitLabel();
+  const q = s => '"' + String(s).replace(/"/g, '""') + '"';
+  const L = [];
+  L.push("# Tide inundation analysis");
+  L.push("# station," + q(st.name) + "," + q(st.id));
+  L.push("# latitude," + st.lat + ",longitude," + st.lng);
+  L.push("# threshold_elevation," + thr.toFixed(3) + "," + u + ",above," + datumName());
+  L.push("# range," + ymd(begin) + "," + ymd(end));
+  L.push("# daylight_definition,sunrise to sunset");
+  L.push("# sampling_minutes," + SAMPLE_MIN);
+  L.push("# source," + q(String(st.id).startsWith("mx-")
+    ? "Harmonic constants derived from CICESE published calendars" : "NOAA CO-OPS predictions"));
+  L.push("# generated," + new Date().toISOString());
+  L.push("# total_inundated_h," + (res.subMs/3600000).toFixed(3));
+  L.push("# inundated_daylight_h," + (res.subDayMs/3600000).toFixed(3));
+  L.push("# inundated_night_h," + (res.subNightMs/3600000).toFixed(3));
+  L.push("# total_exposed_h," + (res.expMs/3600000).toFixed(3));
+  L.push("# exposed_daylight_h," + (res.expDayMs/3600000).toFixed(3));
+  L.push("# exposed_night_h," + (res.expNightMs/3600000).toFixed(3));
+  L.push("# events columns count windows beginning that day; longest_*_h is the longest");
+  L.push("# window touching that day, at full length even if it began the day before");
+  L.push("date,inundated_h,inundated_daylight_h,inundated_night_h,inundation_events,longest_inundation_h," +
+         "exposed_h,exposed_daylight_h,exposed_night_h,exposure_events,longest_exposure_h");
+  const hr = ms => (ms/3600000).toFixed(3);
+  for (const d of res.perDay) {
+    L.push([ymd(d.date).replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3"),
+      hr(d.subMs), hr(d.subDayMs), hr(d.subMs - d.subDayMs), d.subEvents, hr(d.longestSubMs),
+      hr(d.expMs), hr(d.expDayMs), hr(d.expMs - d.expDayMs), d.expEvents, hr(d.longestExpMs)].join(","));
+  }
+  const blob = new Blob([L.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "inundation_" + st.id + "_" + ymd(begin) + "_" + ymd(end) + ".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ------------------------------------------------------------------ *
+ * Calendar view (month grid)
+ * ------------------------------------------------------------------ */
+async function renderCalendar() {
+  const st = state.station;
+  const first = firstOfMonth(state.month);
+  const gridStart = addDays(first, -first.getDay());      // back to Sunday
+  const gridEnd = addDays(gridStart, 41);                 // 6 weeks
+  let pred;
+  try {
+    pred = await provider.getPredictions(st.id, ymd(gridStart), ymd(gridEnd), state.units, { series: false });
+  } catch (err) {
+    document.getElementById("content").innerHTML =
+      '<div class="status err">Could not load predictions: ' + escapeHtml(err.message) + "</div>";
+    return;
+  }
+  let info = null;
+  try { info = state.info = await provider.getStationInfo(st.id); } catch (e) { /* shading optional */ }
+  paintCalendar(pred.hilo, gridStart, info);
+}
+
+// Cosine interpolation across sorted hilo points, for tiny sparklines.
+function makeInterp(hilo) {
+  const pts = hilo.slice().sort((a,b)=>a.time-b.time);
+  return t => {
+    if (!pts.length) return 0;
+    if (t <= pts[0].time) return pts[0].height;
+    if (t >= pts[pts.length-1].time) return pts[pts.length-1].height;
+    let i = 0; while (i < pts.length-1 && pts[i+1].time < t) i++;
+    const a = pts[i], b = pts[i+1];
+    const frac = (t - a.time) / (b.time - a.time);
+    return a.height + (b.height - a.height) * (1 - Math.cos(Math.PI*frac)) / 2;
+  };
+}
+
+// Day's minimum water level by sampling the interpolated curve (for days with no low event).
+function dailyMinLevel(day, interp) {
+  const day0 = new Date(day); day0.setHours(0,0,0,0);
+  let best = null;
+  for (let i = 0; i <= 96; i++) {              // every 15 minutes
+    const t = new Date(day0.getTime() + i*15*60*1000);
+    const v = interp(t);
+    if (best === null || v < best.height) best = { height: v, time: t };
+  }
+  return best;
+}
+
+function paintCalendar(hilo, gridStart, info) {
+  const interp = makeInterp(hilo);
+  const month = state.month.getMonth();
+  const today = startOfToday();
+
+  // One shared height scale across the whole grid so every week reads comparably.
+  const allH = hilo.map(h=>h.height);
+  let gMin = allH.length ? Math.min(...allH) : 0, gMax = allH.length ? Math.max(...allH) : 1;
+  if (gMax - gMin < 0.5) gMax = gMin + 0.5;
+  const pad = (gMax - gMin) * 0.12;
+  gMin -= pad; gMax += pad;
+
+  const dows = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+    .map(d => `<div class="caldow">${d}</div>`).join("");
+
+  // Trailing weeks that hold no days of this month add nothing; drop them.
+  let weekCount = 6;
+  while (weekCount > 4 && addDays(gridStart, (weekCount-1)*7).getMonth() !== month) weekCount--;
+
+  let weeks = "";
+  for (let w = 0; w < weekCount; w++) {
+    const weekStart = addDays(gridStart, w*7);
+    weeks += `<div class="calweek">
+        ${weekCurve(weekStart, hilo, interp, gMin, gMax, info)}
+        <div class="calrow">${weekCells(weekStart, hilo, interp, month, today)}</div>
+      </div>`;
+  }
+
+  // Days of the displayed month itself, for the daylight-saving caution.
+  const monthDays = [];
+  for (let d = 1; d <= new Date(state.month.getFullYear(), month + 1, 0).getDate(); d++) {
+    monthDays.push(new Date(state.month.getFullYear(), month, d));
+  }
+
+  document.getElementById("content").innerHTML =
+    dstCautionBar(dstCautionDays(monthDays)) +
+    `<div class="card calcard">
+       <div class="calgridwrap">
+         <div class="calgrid-head">${dows}</div>
+         ${weeks}
+       </div>
+       <div class="calnote">Continuous tide curve across each week, with every high and low labeled.
+         <b class="k-hi">Highs in amber</b>, lows lighter, and <b class="k-neg">negative lows in blue</b> below the dashed zero line (the best fieldwork windows).
+         Moon discs mark the four principal phases. Tap a day for detail.</div>
+     </div>`;
+
+  document.querySelectorAll(".calcell").forEach(c => c.onclick = () => {
+    const s = c.dataset.date;
+    state.date = new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8));
+    state.view = "day"; state.days = 1;
+    localStorage.setItem("tide.view","day"); localStorage.setItem("tide.days","1");
+    render();
+  });
+}
+
+// One continuous curve spanning a full week (7 days), drawn as a single SVG
+// behind that week's day cells. This is what makes the line connect across
+// day boundaries instead of restarting in each cell.
+function weekCurve(weekStart, hilo, interp, gMin, gMax, info) {
+  const W = 700, H = 74;                 // viewBox units; 100 per day
+  const w0 = new Date(weekStart); w0.setHours(0,0,0,0);
+  const weekMs = 7*24*3600*1000;
+  const xOf = t => ((t - w0) / weekMs) * W;
+  const yOf = v => 4 + (1 - (v - gMin)/(gMax - gMin)) * (H - 8);
+
+  // Sample the interpolated curve finely across the week.
+  const N = 336;                         // every 30 minutes
+  let line = "";
+  for (let i = 0; i <= N; i++) {
+    const t = new Date(w0.getTime() + (i/N)*weekMs);
+    const x = (i/N)*W;
+    line += (i?"L":"M") + x.toFixed(1) + " " + yOf(interp(t)).toFixed(1) + " ";
+  }
+  const area = "M0 " + H + " " + line.replace(/^M/, "L") + " L" + W + " " + H + " Z";
+
+  // Night shading per day, so the week reads as day/night bands.
+  let night = "";
+  if (info) {
+    for (let d = 0; d < 7; d++) {
+      const day = addDays(w0, d);
+      const s = sunForDay(day, state.station.lat, state.station.lng, info);
+      const dStart = xOf(day), dEnd = xOf(addDays(day, 1));
+      if (s.polar === "night") { night += `<rect x="${dStart}" y="0" width="${dEnd-dStart}" height="${H}" fill="#2D555F" opacity="0.07"/>`; continue; }
+      if (s.polar === "day" || !s.sunrise || !s.sunset) continue;
+      const xsr = xOf(s.sunrise), xss = xOf(s.sunset);
+      night += `<rect x="${dStart.toFixed(1)}" y="0" width="${(xsr-dStart).toFixed(1)}" height="${H}" fill="#2D555F" opacity="0.06"/>`;
+      night += `<rect x="${xss.toFixed(1)}" y="0" width="${(dEnd-xss).toFixed(1)}" height="${H}" fill="#2D555F" opacity="0.06"/>`;
+    }
+  }
+
+  // Day divider lines.
+  let dividers = "";
+  for (let d = 1; d < 7; d++) {
+    const x = (d/7)*W;
+    dividers += `<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="#9aa79d" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  // Zero-datum reference line, the waterline that matters for tidepooling.
+  // Same blue as the negative-low labels, so "below this line" reads as one cue.
+  let zero = "";
+  if (gMin < 0 && gMax > 0) {
+    const y = yOf(0).toFixed(1);
+    zero = `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="#1668B8" stroke-width="1" stroke-dasharray="3 3" opacity="0.6" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  // Dots at each high/low turning point.
+  let dots = "";
+  hilo.forEach(h => {
+    if (h.time < w0 || h.time >= addDays(w0, 7)) return;
+    const col = h.type === "H" ? "#BE7828" : (h.height < 0 ? "#1668B8" : "#2D555F");
+    dots += `<circle cx="${xOf(h.time).toFixed(1)}" cy="${yOf(h.height).toFixed(1)}" r="${h.height < 0 ? 2.8 : 2.2}" fill="${col}"/>`;
+  });
+
+  // Today highlight band.
+  let todayBand = "";
+  const today = startOfToday();
+  if (today >= w0 && today < addDays(w0, 7)) {
+    const x = xOf(today), xe = xOf(addDays(today, 1));
+    todayBand = `<rect x="${x.toFixed(1)}" y="0" width="${(xe-x).toFixed(1)}" height="${H}" fill="#BE7828" opacity="0.06"/>`;
+  }
+
+  return `<svg class="calcurve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <defs>
+      <linearGradient id="calfill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#82A08C" stop-opacity="0.34"/>
+        <stop offset="1" stop-color="#82A08C" stop-opacity="0.05"/>
+      </linearGradient>
+    </defs>
+    ${night}${todayBand}${dividers}${zero}
+    <path d="${area}" fill="url(#calfill)"/>
+    <path d="${line}" fill="none" stroke="#2D555F" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    ${dots}
+  </svg>`;
+}
+
+// The 7 day cells for one week: date number plus every tide event for that day.
+function weekCells(weekStart, hilo, interp, month, today) {
+  let out = "";
+  for (let d = 0; d < 7; d++) {
+    const day = addDays(weekStart, d);
+    const inMonth = day.getMonth() === month;
+    const isToday = sameDay(day, today);
+    const dayHilo = hilo.filter(h => sameDay(h.time, day)).sort((a,b) => a.time - b.time);
+
+    let events;
+    if (dayHilo.length) {
+      events = dayHilo.map(h => {
+        const cls = h.type === "H" ? "ev hi" : (h.height < 0 ? "ev lo neg" : "ev lo");
+        return `<div class="${cls}"><span class="t">${fmtTimeShort(h.time)}</span><span class="v">${fmtHeight(h.height)}</span></div>`;
+      }).join("");
+    } else {
+      // Diurnal-inequality days with no turning point: show the day's min level.
+      const m = dailyMinLevel(day, interp);
+      events = m ? `<div class="ev lo ${m.height<0?"neg":""}"><span class="t">${fmtTimeShort(m.time)}</span><span class="v">${fmtHeight(m.height)}</span></div>` : "";
+    }
+
+    // Principal moon phases only (four per month), so the grid stays uncluttered.
+    const ph = principalPhaseFor(day);
+    const southern = state.station && state.station.lat < 0;
+    const canonical = { new: 0, fq: 0.5, full: 1, lq: 0.5 };
+    const moon = ph
+      ? `<div class="moon" title="${ph.name}">${moonDisc(ph.v, canonical[ph.key], 14, southern)}<span>${ph.short}</span></div>`
+      : "";
+
+    out += `<div class="calcell ${inMonth?"":"out"} ${isToday?"today":""}" data-date="${ymd(day)}">
+        ${moon}
+        <div class="cd">${day.getDate()}</div>
+        <div class="evs">${events}</div>
+      </div>`;
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * Boot
+ * ------------------------------------------------------------------ */
+/* About dialog. Opened from the footer link, or from the chip beside a station whose
+   tides come from the in-house harmonic model rather than a published feed. */
+const aboutModal = document.getElementById("aboutModal");
+function openAbout() { aboutModal.hidden = false; document.body.style.overflow = "hidden"; }
+function closeAbout() { aboutModal.hidden = true; document.body.style.overflow = ""; }
+document.getElementById("aboutBtn").onclick = openAbout;
+document.getElementById("aboutClose").onclick = closeAbout;
+aboutModal.addEventListener("click", e => { if (e.target === aboutModal) closeAbout(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !aboutModal.hidden) closeAbout(); });
+
+/* The "next tide" card names the first event after `now` and counts down to it, both
+   fixed at render time. On a window left open all day that card would go on naming a
+   tide that has already passed. Re-render just that block on a timer: the predictions
+   themselves never change, so nothing is refetched and nothing else on the page moves. */
+let lastDayView = null;
+setInterval(() => {
+  if (state.view !== "day" || !lastDayView) return;
+  const host = document.getElementById("tideCards");
+  if (!host) return;
+  host.innerHTML = nextTideCard(lastDayView.hilo, lastDayView.day0, lastDayView.series);
+}, 30000);
+
+/* Register the service worker only when actually served over http(s). The native
+   macOS and iOS shells load this page from the custom tides:// scheme, where service
+   workers are unavailable and registering would throw on every launch. */
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => { /* offline support is optional */ });
+  });
+}
+
+state.favorites = loadFavs();
+updateFavUI();
+render();
+</script>
+</body>
+</html>
