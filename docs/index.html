@@ -411,6 +411,9 @@
     cursor: pointer; vertical-align: 3px; border: none; font-family: inherit;
   }
   .srcchip:hover { background: rgba(190,120,40,.24); }
+  /* Caution rather than description: this station's predictions deserve less trust. */
+  .srcchip.warn { background: rgba(190,120,40,.28); color: #8B5416; }
+  .srcchip.warn:hover { background: rgba(190,120,40,.4); }
 
   /* Touch and safe-area handling, last so it wins over the narrow-screen block above.
      The page runs edge to edge under the status bar, Dynamic Island and home
@@ -498,6 +501,15 @@
   </footer>
 </main>
 
+<div class="modalwrap" id="noteModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="noteTitle">
+    <button class="modalclose" id="noteClose" aria-label="Close">×</button>
+    <h2 id="noteTitle">About this station</h2>
+    <p id="noteBody"></p>
+    <p><button class="aboutlink" id="noteMore">More about the data</button></p>
+  </div>
+</div>
+
 <div class="modalwrap" id="mapModal" hidden>
   <div class="modal mapmodal" role="dialog" aria-modal="true" aria-labelledby="mapTitle">
     <button class="modalclose" id="mapClose" aria-label="Close">×</button>
@@ -558,6 +570,28 @@
     in Baja California's border municipalities starts mid-March and ends in early November, so for
     roughly three weeks each March a printed CICESE table sits an hour behind civil time. This app
     shows civil time, and flags those dates when you view them.</p>
+
+    <h3>How much to trust a station</h3>
+    <p>Not all NOAA stations are equally well measured, and the difference is large enough
+    to matter. A badge appears beside the station number when there is a caveat worth
+    knowing; a station with nothing to declare shows nothing.</p>
+    <p><b>Short record.</b> Two tidal constituents can only be told apart if the record is
+    long enough for them to drift a full cycle out of step. <b>K1 from P1, and S2 from K2,
+    each need 182.6 days.</b> Analysed from anything shorter, they cannot be measured and
+    have to be inferred from equilibrium theory instead. That is detectable: inference
+    leaves both amplitude ratios within a fraction of a percent of the textbook values,
+    where genuinely measured ones sit several percent off, because real coastlines are not
+    textbooks. This app tests the published constants themselves rather than trusting any
+    metadata, and needs no network to do it.</p>
+    <p>It matters because P1 modulates K1 through the year and K2 modulates S2 over six
+    months, so inferring them produces timing error that <b>drifts with the season and the
+    spring-neap cycle</b> rather than showing as a constant offset. Mission Bay (Campland)
+    is the local example: three months of data from February to April 2017, with the
+    seasonal terms borrowed from La Jolla. Treat its times as good to 10 or 15 minutes,
+    against roughly 2 at San Diego or La Jolla.</p>
+    <p><b>Subordinate station.</b> Not measured in its own right at all. NOAA predicts it
+    from a nearby reference station by shifting each high and low in time and scaling it in
+    height, and publishes no continuous curve.</p>
 
     <h3>Working without a connection</h3>
     <p>The four Mexican sites need no network at all, and five San Diego sites are carried in
@@ -908,6 +942,105 @@ const US_STATIONS = {
 const US_SUB = {
   "9410120": {n:"Imperial Beach",st:"CA",lat:32.5783,lng:-117.135,ref:"9410170",tH:0,tL:-3,hH:0.93,hL:0.96},
   "TWC0413": {n:"Quivira Basin, Mission Bay",st:"CA",lat:32.7667,lng:-117.2333,ref:"9410170",tH:5,tL:4,hH:0.95,hL:0.95}
+};
+
+/* NOAA's own note on the record behind each embedded station's constants. */
+const US_HARCON_NOTE = {
+  "9410196": "Vector averaged from three months, February to April 2017, with Sa and Ssa taken from La Jolla.",
+  "9410230": "Average of six one-year analyses, 2007 to 2012.",
+  "9410170": "Vector average of five years, 2017 to 2021, with Sa from a 20-year average."
+};
+
+/* ------------------------------------------------------------------ *
+ * How well determined is a station?
+ *
+ * Two constituents can only be separated by an analysis if the record is long
+ * enough for them to drift a full cycle apart. K1 from P1, and S2 from K2, each
+ * need 182.6 days. From a shorter record they cannot be measured and have to be
+ * inferred from equilibrium theory instead, which leaves their amplitude ratios
+ * sitting within a fraction of a percent of the textbook value. Where they were
+ * genuinely measured they land several percent off it, because real coastlines
+ * are not textbooks.
+ *
+ * So the constants themselves reveal the length of the record behind them, with
+ * no metadata and no network. That is the test used here.
+ * ------------------------------------------------------------------ */
+const EQ_RATIOS = [["P1", "K1", 0.33093], ["K2", "S2", 0.27215]];
+const INFERRED_TOL = 0.015;
+
+/* Returns how far the WORST of these pairs sits from equilibrium theory, or null if
+   fewer than two pairs are available to judge on.
+
+   The worst pair decides, not the closest. A record too short to resolve either pair
+   has to infer both, so inference puts every pair on theory at once. A single pair
+   landing near theory means nothing: Boston has five years behind it and its P1/K1 is
+   0.7% off, purely by chance, while its K2/S2 is 4.2% off. Judging on the closest pair
+   flagged Boston as a short record, which is the opposite of the truth. */
+function inferenceDeviation(c) {
+  const devs = [];
+  for (const [small, big, theory] of EQ_RATIOS) {
+    if (!c[small] || !c[big] || !c[big][0]) continue;
+    devs.push(Math.abs(c[small][0]/c[big][0] - theory)/theory);
+  }
+  return devs.length >= 2 ? Math.max(...devs) : null;
+}
+
+const StationQuality = {
+  _cache: {},
+
+  async assess(st) {
+    const id = String(st.id);
+    if (id in this._cache) return this._cache[id];
+    let out = null;
+    try { out = await this._compute(st); } catch (e) { out = null; }
+    return (this._cache[id] = out);
+  },
+
+  async _compute(st) {
+    const id = String(st.id);
+    if (id.startsWith("mx-")) {
+      const s = HarmonicProvider._st(id);
+      return { cls: "", label: "harmonic model",
+        detail: "Fitted here from CICESE's published tide tables. Scored blind against a year " +
+                "it was not fitted on: " + s.rms + " cm on height, " + s.tmae + " min on timing." };
+    }
+    if (US_SUB[id]) {
+      const ref = US_STATIONS[US_SUB[id].ref];
+      return { cls: "warn", label: "subordinate station",
+        detail: "Not measured as a station in its own right. NOAA predicts it from " +
+                (ref ? ref.n : US_SUB[id].ref) + ", shifting each high and low in time and " +
+                "scaling it in height, and publishes no continuous curve for it." };
+    }
+
+    let c = US_STATIONS[id] ? US_STATIONS[id].c : null;
+    let note = US_HARCON_NOTE[id] || "";
+    if (!c) {
+      const r = await fetch("https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/" +
+        encodeURIComponent(id) + "/harcon.json?units=metric");
+      const d = await r.json();
+      const list = (d.HarmonicConstituents || []).filter(x => x.amplitude > 0);
+      if (!list.length) {
+        return { cls: "warn", label: "subordinate station",
+          detail: "NOAA publishes no harmonic constants for this station. It is predicted from a " +
+                  "nearby reference station, and the curve drawn between its highs and lows is this app's." };
+      }
+      c = {};
+      for (const x of list) c[x.name] = [x.amplitude*100, x.phase_GMT];
+      const m2 = list.find(x => x.name === "M2");
+      note = (m2 && m2.comments) ? String(m2.comments) : "";
+    }
+
+    const dev = inferenceDeviation(c);
+    if (dev !== null && dev < INFERRED_TOL) {
+      return { cls: "warn", label: "short record",
+        detail: "The constants behind this station come from a record too short to separate K1 from " +
+                "P1, or S2 from K2, which needs 182.6 days. Those were inferred from theory rather " +
+                "than measured, so its timing drifts through the season and across the spring-neap " +
+                "cycle in a way a long-record station's does not. Treat the times as good to about " +
+                "10 to 15 minutes rather than 2." + (note ? " NOAA's note: " + note : "") };
+    }
+    return null;    // well determined: say nothing rather than add clutter
+  }
 };
 
 const OfflineUS = {
@@ -1728,10 +1861,7 @@ function shell() {
     <div class="stationhead">
       <div>
         <div class="name">${escapeHtml(st.name)}</div>
-        <div class="coords">${st.state ? escapeHtml(st.state) + " · " : ""}${st.lat.toFixed(3)}, ${st.lng.toFixed(3)} · Station #${st.id}${
-          String(st.id).startsWith("mx-")
-            ? `<button class="srcchip" id="srcChip" title="How these predictions are made">harmonic model</button>` : ""
-        }</div>
+        <div class="coords">${st.state ? escapeHtml(st.state) + " · " : ""}${st.lat.toFixed(3)}, ${st.lng.toFixed(3)} · Station #${st.id}<span id="srcChipSlot"></span></div>
       </div>
       <div class="left" style="gap:12px">
         <div class="seg" id="viewSeg">
@@ -1769,8 +1899,21 @@ function wireControls() {
   bind("nextMon", () => { state.month = addMonths(state.month, 1); render(); });
   bind("thisMonBtn", () => { state.month = firstOfMonth(new Date()); render(); });
 
-  const chip = document.getElementById("srcChip");
-  if (chip) chip.onclick = openAbout;
+  // How well determined this station is. Assessing it may need a network round trip,
+  // so the chip appears once the answer is known rather than holding up the render.
+  // Nothing is shown for a well-determined station: a badge on every screen would stop
+  // meaning anything, and the point is to mark the ones that deserve less trust.
+  const slot = document.getElementById("srcChipSlot");
+  if (slot && state.station) {
+    const forStation = state.station.id;
+    StationQuality.assess(state.station).then(q => {
+      const cur = document.getElementById("srcChipSlot");
+      if (!cur || !q || !state.station || state.station.id !== forStation) return;
+      cur.innerHTML = '<button class="srcchip ' + q.cls + '" id="srcChip">' +
+                      escapeHtml(q.label) + "</button>";
+      document.getElementById("srcChip").onclick = () => openNote(q.label, q.detail);
+    });
+  }
   const focusSeg = document.getElementById("focusSeg");
   if (focusSeg) focusSeg.querySelectorAll("button").forEach(b => b.onclick = () => {
     state.focus = b.dataset.focus; localStorage.setItem("tide.focus", state.focus); render();
@@ -3124,6 +3267,21 @@ document.addEventListener("keydown", e => {
 
 /* About dialog. Opened from the footer link, or from the chip beside a station whose
    tides come from the in-house harmonic model rather than a published feed. */
+/* Small note dialog, opened from the chip beside a station whose predictions carry a
+   caveat worth reading before you plan a low tide around them. */
+const noteModal = document.getElementById("noteModal");
+function openNote(title, body) {
+  document.getElementById("noteTitle").textContent = title.charAt(0).toUpperCase() + title.slice(1);
+  document.getElementById("noteBody").textContent = body;
+  noteModal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+function closeNote() { noteModal.hidden = true; document.body.style.overflow = ""; }
+document.getElementById("noteClose").onclick = closeNote;
+document.getElementById("noteMore").onclick = () => { closeNote(); openAbout(); };
+noteModal.addEventListener("click", e => { if (e.target === noteModal) closeNote(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !noteModal.hidden) closeNote(); });
+
 const aboutModal = document.getElementById("aboutModal");
 function openAbout() { aboutModal.hidden = false; document.body.style.overflow = "hidden"; }
 function closeAbout() { aboutModal.hidden = true; document.body.style.overflow = ""; }
