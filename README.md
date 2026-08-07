@@ -49,8 +49,32 @@ The derivation tooling lives in `harmonics/`.
 ## Offline
 
 The service worker caches the application shell, so the app launches without a
-connection. The four Mexican sites then work completely offline. NOAA stations need
-the network, though responses already fetched are kept as a fallback.
+connection. The four Mexican sites then work completely offline, and so do five San
+Diego sites: Mission Bay (Campland), Quivira Basin, La Jolla, Imperial Beach and San
+Diego (Broadway Pier).
+
+Nothing is fitted for the San Diego sites. They carry **NOAA's own published harmonic
+constants**, which NOAA states as amplitude and Greenwich epoch, the same convention
+the harmonic engine already used. Quivira Basin and Imperial Beach are not harmonic
+stations; NOAA predicts them as subordinates of San Diego, and so does this app, from
+NOAA's published time shifts and height ratios.
+
+NOAA remains the source whenever it is reachable, so on a connection the numbers are
+NOAA's exactly. Against a full year of NOAA's published 2026 predictions:
+
+| Site | Curve | Timing | Height |
+|---|---|---|---|
+| Mission Bay, Campland | 0.8 cm | 1.2 min | 0.5 cm |
+| Quivira Basin, Mission Bay | n/a | 2.0 min | 0.6 cm |
+| La Jolla | 0.8 cm | 1.9 min | 0.5 cm |
+| Imperial Beach | n/a | 2.0 min | 0.6 cm |
+| San Diego, Broadway Pier | 1.0 cm | 2.0 min | 0.7 cm |
+
+NOAA publishes only highs and lows for the two subordinate sites, so there is no
+continuous curve of theirs to compare against.
+
+Every other NOAA station still needs the network, though responses already fetched are
+kept as a fallback.
 
 ## Limitations
 

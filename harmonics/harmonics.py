@@ -56,7 +56,11 @@ CONSTITUENTS = {
     "M3":   (3,  0,  0,  0, 0,    0, "M3"),
 }
 
-EPOCH = datetime(1899, 12, 31, 12, 0, 0)   # JD 2415020.0, Schureman's 1900 Jan 0.5
+EPOCH = datetime(1900, 1, 1, 0, 0, 0)   # JD 2415020.5. Schureman's argument
+# constants are referenced to 1900 January 1 at 0h UT, NOT to Greenwich mean noon
+# on 31 December 1899. Using the latter puts s 6.59 deg and h 0.49 deg ahead, which
+# a fit silently absorbs into its phases and which then shows up as a 12-25 minute
+# timing error the moment those phases meet independently published constants.
 
 def astro(dt_utc):
     """Astronomical arguments in degrees. dt_utc may be an array of datetimes."""

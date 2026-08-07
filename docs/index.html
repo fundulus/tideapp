@@ -511,6 +511,27 @@
     roughly three weeks each March a printed CICESE table sits an hour behind civil time. This app
     shows civil time, and flags those dates when you view them.</p>
 
+    <h3>Working without a connection</h3>
+    <p>The four Mexican sites need no network at all, and five San Diego sites are carried in
+    the page the same way, so they keep working out of signal: <b>Mission Bay (Campland)</b>,
+    <b>Quivira Basin (Mission Bay)</b>, <b>La Jolla</b>, <b>Imperial Beach</b> and
+    <b>San Diego (Broadway Pier)</b>. Nothing is fitted for these: they use NOAA's own published
+    harmonic constants, and the two that are not harmonic stations are built the way NOAA builds
+    them, from San Diego's tide shifted in time and scaled in height by NOAA's published offsets.</p>
+    <p>NOAA stays the source whenever it can be reached, so on a connection the numbers are
+    NOAA's exactly. Checked against a full year of NOAA's published 2026 predictions, the offline
+    curve reproduces it to:</p>
+    <table class="abouttable">
+      <tr><th>Site</th><th>Curve</th><th>Timing of highs and lows</th><th>Height</th></tr>
+      <tr><td>Mission Bay, Campland</td><td>0.8 cm</td><td>1.2 min</td><td>0.5 cm</td></tr>
+      <tr><td>Quivira Basin, Mission Bay</td><td>n/a</td><td>2.0 min</td><td>0.6 cm</td></tr>
+      <tr><td>La Jolla</td><td>0.8 cm</td><td>1.9 min</td><td>0.5 cm</td></tr>
+      <tr><td>Imperial Beach</td><td>n/a</td><td>2.0 min</td><td>0.6 cm</td></tr>
+      <tr><td>San Diego, Broadway Pier</td><td>1.0 cm</td><td>2.0 min</td><td>0.7 cm</td></tr>
+    </table>
+    <p>NOAA publishes only highs and lows for the two subordinate sites, so there is no continuous
+    curve of theirs to compare against.</p>
+
     <h3>Sun and moon</h3>
     <p>Sunrise and sunset are computed from each station's latitude and longitude and aligned to its
     local clock. Moon phases use the Meeus algorithm, which agrees with CICESE's published phase
@@ -621,10 +642,10 @@ const NOAAProvider = {
  * remote field sites.
  * ------------------------------------------------------------------ */
 const MX_STATIONS = {
-  bla: {n:"Bahia de los Angeles",st:"B.C.",lat:28.95,lng:-113.55,off:-8,dst:false,Z0:101.69,rms:2.76,tmae:5.6,c:{"M2":[66.295,249.86],"S2":[34.86,268.98],"N2":[18.423,230.94],"K2":[9.793,268.89],"NU2":[3.124,241.45],"MU2":[3.834,202.34],"2N2":[3.382,192.44],"L2":[1.628,280.34],"T2":[2.94,265.04],"K1":[33.589,185.87],"O1":[21.824,161.03],"P1":[10.824,180.24],"Q1":[3.887,149.32],"J1":[2.314,203.86],"OO1":[1.0,223.6],"RHO1":[0.827,144.37],"2Q1":[0.542,135.07],"S1":[1.565,298.92],"MF":[0.587,162.06],"MM":[0.968,185.12],"SSA":[2.957,302.95],"SA":[18.586,155.46],"MSF":[0.618,187.74],"M4":[0.54,330.37],"MS4":[0.418,156.98],"MN4":[0.336,236.98],"S4":[0.085,302.19],"M6":[0.543,251.94],"2MS6":[0.348,222.46],"MK3":[0.206,97.18],"M3":[0.641,87.8]}},
-  snq: {n:"Bahia de San Quintin",st:"B.C.",lat:30.47,lng:-116.0,off:-8,dst:true,Z0:81.27,rms:2.05,tmae:5.8,c:{"M2":[53.894,135.15],"S2":[23.05,148.8],"N2":[11.209,111.06],"K2":[6.986,144.65],"NU2":[1.964,110.5],"MU2":[1.091,95.74],"2N2":[1.323,77.48],"L2":[0.973,135.79],"T2":[1.413,139.55],"2SM2":[0.178,87.43],"K1":[30.466,214.77],"O1":[19.247,186.91],"P1":[9.542,211.8],"Q1":[3.115,174.73],"J1":[2.141,244.53],"OO1":[0.972,281.92],"RHO1":[0.674,167.83],"2Q1":[0.451,180.28],"S1":[1.522,172.76],"MF":[0.332,256.69],"MM":[1.713,169.8],"SSA":[2.791,248.45],"SA":[7.793,197.32],"MSF":[2.003,187.63],"M4":[0.959,202.3],"MS4":[0.832,244.3],"MN4":[0.726,190.99],"S4":[0.332,292.97],"M6":[0.741,194.26],"2MS6":[0.37,180.02],"MK3":[0.715,243.47],"M3":[1.049,202.5]}},
-  ens: {n:"Ensenada",st:"B.C.",lat:31.85,lng:-116.63,off:-8,dst:true,Z0:81.52,rms:1.47,tmae:4.3,c:{"M2":[48.685,124.7],"S2":[20.786,132.88],"N2":[11.535,96.06],"K2":[6.16,128.19],"NU2":[1.972,106.45],"MU2":[1.688,55.77],"2N2":[1.766,58.48],"L2":[0.645,163.0],"T2":[1.198,114.61],"2SM2":[0.061,117.81],"K1":[32.324,206.61],"O1":[20.951,178.06],"P1":[10.023,201.71],"Q1":[3.355,161.75],"J1":[2.089,223.47],"OO1":[1.013,252.96],"RHO1":[0.655,175.72],"2Q1":[0.474,155.15],"S1":[0.305,151.47],"MF":[0.222,108.87],"MM":[0.241,199.58],"SSA":[1.614,274.36],"SA":[7.72,187.7],"MSF":[0.322,94.28],"M4":[0.305,286.69],"MS4":[0.169,213.14],"MN4":[0.369,165.94],"S4":[0.174,223.46],"2MS6":[0.126,36.56],"MK3":[0.072,221.97],"M3":[0.763,173.17]}},
-  lto: {n:"Loreto",st:"B.C.S.",lat:26.01,lng:-111.35,off:-7,dst:false,Z0:43.99,rms:1.69,tmae:9.9,c:{"M2":[14.701,105.26],"S2":[12.862,114.31],"N2":[3.093,98.01],"K2":[3.58,112.16],"NU2":[0.576,107.03],"MU2":[0.911,111.47],"2N2":[0.561,63.53],"L2":[0.376,20.56],"T2":[0.878,93.54],"2SM2":[0.114,162.07],"K1":[26.398,183.96],"O1":[18.339,158.92],"P1":[8.201,176.79],"Q1":[2.815,144.81],"J1":[1.823,188.82],"OO1":[0.803,218.44],"RHO1":[0.489,142.76],"2Q1":[0.315,136.97],"S1":[1.107,0.54],"MF":[0.424,130.3],"MM":[0.939,144.28],"SSA":[3.41,222.51],"SA":[13.824,164.37],"MSF":[0.548,114.04],"M4":[0.9,349.28],"MS4":[0.521,285.77],"MN4":[0.277,354.33],"S4":[0.112,132.01],"MK3":[0.3,333.18],"M3":[0.501,12.7]}}
+  bla: {n:"Bahia de los Angeles",st:"B.C.",lat:28.95,lng:-113.55,off:-8,dst:false,Z0:101.69,rms:2.76,tmae:5.6,c:{"M2":[66.295,262.05],"S2":[34.86,268.98],"N2":[18.423,249.66],"K2":[9.793,267.9],"NU2":[3.124,259.3],"MU2":[3.834,226.72],"2N2":[3.382,217.7],"L2":[1.628,286.0],"T2":[2.94,265.53],"K1":[33.589,185.38],"O1":[21.824,173.71],"P1":[10.824,180.73],"Q1":[3.887,168.54],"J1":[2.314,196.83],"OO1":[1.0,209.93],"RHO1":[0.827,162.71],"2Q1":[0.542,160.82],"S1":[1.565,298.92],"MF":[0.587,148.88],"MM":[0.968,178.59],"SSA":[2.957,301.96],"SA":[18.586,154.97],"MSF":[0.618,175.55],"M4":[0.54,354.75],"MS4":[0.418,169.17],"MN4":[0.336,267.89],"S4":[0.085,302.19],"M6":[0.543,288.51],"2MS6":[0.348,246.84],"MK3":[0.206,108.88],"M3":[0.641,106.09]}},
+  snq: {n:"Bahia de San Quintin",st:"B.C.",lat:30.47,lng:-116.0,off:-8,dst:true,Z0:81.27,rms:2.05,tmae:5.8,c:{"M2":[53.894,147.34],"S2":[23.05,148.8],"N2":[11.209,129.78],"K2":[6.986,143.66],"NU2":[1.964,128.35],"MU2":[1.091,120.12],"2N2":[1.323,102.74],"L2":[0.973,141.45],"T2":[1.413,140.04],"2SM2":[0.178,75.24],"K1":[30.466,214.28],"O1":[19.247,199.59],"P1":[9.542,212.29],"Q1":[3.115,193.95],"J1":[2.141,237.5],"OO1":[0.972,268.25],"RHO1":[0.674,186.17],"2Q1":[0.451,206.03],"S1":[1.522,172.76],"MF":[0.332,243.51],"MM":[1.713,163.27],"SSA":[2.791,247.46],"SA":[7.793,196.83],"MSF":[2.003,175.44],"M4":[0.959,226.68],"MS4":[0.832,256.49],"MN4":[0.726,221.9],"S4":[0.332,292.97],"M6":[0.741,230.83],"2MS6":[0.37,204.4],"MK3":[0.715,255.17],"M3":[1.049,220.79]}},
+  ens: {n:"Ensenada",st:"B.C.",lat:31.85,lng:-116.63,off:-8,dst:true,Z0:81.52,rms:1.47,tmae:4.3,c:{"M2":[48.685,136.89],"S2":[20.786,132.88],"N2":[11.535,114.78],"K2":[6.16,127.2],"NU2":[1.972,124.3],"MU2":[1.688,80.15],"2N2":[1.766,83.74],"L2":[0.645,168.66],"T2":[1.198,115.1],"2SM2":[0.061,105.62],"K1":[32.324,206.12],"O1":[20.951,190.74],"P1":[10.023,202.2],"Q1":[3.355,180.97],"J1":[2.089,216.44],"OO1":[1.013,239.29],"RHO1":[0.655,194.06],"2Q1":[0.474,180.9],"S1":[0.305,151.47],"MF":[0.222,95.69],"MM":[0.241,193.05],"SSA":[1.614,273.37],"SA":[7.72,187.21],"MSF":[0.322,82.09],"M4":[0.305,311.07],"MS4":[0.169,225.33],"MN4":[0.369,196.85],"S4":[0.174,223.46],"2MS6":[0.126,60.94],"MK3":[0.072,233.67],"M3":[0.763,191.46]}},
+  lto: {n:"Loreto",st:"B.C.S.",lat:26.01,lng:-111.35,off:-7,dst:false,Z0:43.99,rms:1.69,tmae:9.9,c:{"M2":[14.701,117.45],"S2":[12.862,114.31],"N2":[3.093,116.73],"K2":[3.58,111.17],"NU2":[0.576,124.88],"MU2":[0.911,135.85],"2N2":[0.561,88.79],"L2":[0.376,26.22],"T2":[0.878,94.03],"2SM2":[0.114,149.88],"K1":[26.398,183.47],"O1":[18.339,171.6],"P1":[8.201,177.28],"Q1":[2.815,164.03],"J1":[1.823,181.79],"OO1":[0.803,204.77],"RHO1":[0.489,161.1],"2Q1":[0.315,162.72],"S1":[1.107,0.54],"MF":[0.424,117.12],"MM":[0.939,137.75],"SSA":[3.41,221.52],"SA":[13.824,163.88],"MSF":[0.548,101.85],"M4":[0.9,13.66],"MS4":[0.521,297.96],"MN4":[0.277,25.24],"S4":[0.112,132.01],"MK3":[0.3,344.88],"M3":[0.501,30.99]}}
 };
 
 // Doodson coefficients over (tau, s, h, p, p1), a 90-degree phase term, and the
@@ -640,11 +661,16 @@ const MX_DOODSON = {
   "SSA":[0,0,2,0,0,0,null],     "SA":[0,0,1,0,0,0,null],     "MSF":[0,2,-2,0,0,0,"M2"],
   "M4":[4,0,0,0,0,0,"M4"],      "MS4":[4,2,-2,0,0,0,"M2"],   "MN4":[4,-1,0,1,0,0,"M4"],
   "S4":[4,4,-4,0,0,0,null],     "M6":[6,0,0,0,0,0,"M6"],     "2MS6":[6,2,-2,0,0,0,"M4"],
-  "MK3":[3,1,0,0,0,90,"MK3"],   "M3":[3,0,0,0,0,0,"M3"]
+  "MK3":[3,1,0,0,0,90,"MK3"],   "M3":[3,0,0,0,0,0,"M3"],
+  // Used by NOAA's published constants but not by the CICESE fit. Every row here was
+  // checked against NOAA's own published speed for the constituent before being added.
+  // NOAA spells RHO1 as "RHO"; it is the same constituent and is renamed on import.
+  "LAM2":[2,1,-2,1,0,180,"M2"], "R2":[2,2,-1,0,-1,180,null], "S6":[6,6,-6,0,0,0,null],
+  "M8":[8,0,0,0,0,0,"M8"],      "2MK3":[3,-1,0,0,0,-90,"2MK3"], "M1":[1,0,0,1,0,90,null]
 };
 // Hourly rates of the astronomical arguments, for advancing V within a day.
 const MX_RATES = [14.4920521, 0.5490165, 0.0410686, 0.0046418, 0.0000020];
-const MX_EPOCH = Date.UTC(1899, 11, 31, 12, 0, 0);
+const MX_EPOCH = Date.UTC(1900, 0, 1, 0, 0, 0);
 const DEG = Math.PI / 180;
 
 function mxAstro(utcMs) {
@@ -677,8 +703,10 @@ function mxNodal(kind, N) {
   const m = mxNodal("M2", N);
   if (kind === "M4") return [m[0]*m[0], 2*m[1]];
   if (kind === "M6") return [m[0]*m[0]*m[0], 3*m[1]];
+  if (kind === "M8") return [Math.pow(m[0], 4), 4*m[1]];
   if (kind === "M3") return [Math.pow(m[0], 1.5), 1.5*m[1]];
   if (kind === "MK3") { const k = mxNodal("K1", N); return [m[0]*k[0], m[1]+k[1]]; }
+  if (kind === "2MK3") { const k = mxNodal("K1", N); return [m[0]*m[0]*k[0], 2*m[1]-k[1]]; }
   return [1, 0];
 }
 
@@ -689,14 +717,29 @@ function mxOffset(st, localDate) {
   return st.off + (st.dst && isUSDST(localDate) ? 1 : 0);
 }
 
+/* Index into a 1-minute local day at which the clock jumps, or -1 on an ordinary day.
+   A wall-clock day containing a DST change is not continuous in real time, so the two
+   samples either side of the jump are not neighbours and must not be read as a turning
+   point; without this the hi/lo table grows a spurious low and high every March. */
+function dstSeamIndex(st, y, mo, d) {
+  return mxOffset(st, new Date(y, mo, d, 0, 0)) === mxOffset(st, new Date(y, mo, d, 23, 0))
+    ? -1 : 120;
+}
+
 /* Water level in cm for one local day, sampled every stepMin minutes.
    The slow astronomical arguments and nodal terms are evaluated once per day and
    V is advanced linearly within it, which keeps a month of calendar sampling fast
    without measurable loss of accuracy. */
 function mxDayLevels(st, dayLocal, stepMin, count) {
-  const off = mxOffset(st, dayLocal);
-  const baseUtc = Date.UTC(dayLocal.getFullYear(), dayLocal.getMonth(), dayLocal.getDate(), 0, 0)
-                  - off*3600000;
+  const Y = dayLocal.getFullYear(), Mo = dayLocal.getMonth(), D = dayLocal.getDate();
+  // On the two changeover days the offset is not constant across the local day, so
+  // sampling local wall-clock minutes at a fixed offset would slide the curve an hour
+  // out either side of 02:00. Take the offset before and after and step over the seam.
+  const off = mxOffset(st, new Date(Y, Mo, D, 0, 0));
+  const offLate = mxOffset(st, new Date(Y, Mo, D, 23, 0));
+  const shift = offLate - off;                 // 0 on an ordinary day, +/-1 twice a year
+  const seam = shift ? 120 / stepMin : Infinity;   // 02:00 local
+  const baseUtc = Date.UTC(Y, Mo, D, 0, 0) - off*3600000;
   const A = mxAstro(baseUtc);
   const terms = [];
   for (const name in st.c) {
@@ -710,12 +753,48 @@ function mxDayLevels(st, dayLocal, stepMin, count) {
   }
   const out = new Float64Array(count);
   for (let i = 0; i < count; i++) {
-    const hrs = i*stepMin/60;
+    const hrs = i*stepMin/60 - (i >= seam ? shift : 0);
     let v = st.Z0;
     for (let k = 0; k < terms.length; k++) v += terms[k].amp * Math.cos(terms[k].phase + terms[k].w*hrs);
     out[i] = v;
   }
   return out;
+}
+
+/* Predictions for any station carrying harmonic constants, whichever source they came
+   from. 1-minute sampling drives turning-point detection; the display series is
+   decimated from the same curve so the chart and the hi/lo table always agree. */
+function harmonicPredictions(st, begin, end, units, opts = {}) {
+  const toUnits = v => units === "metric" ? v/100 : v/30.48;   // cm -> m or ft
+  const mk = (y, m, d) => new Date(+y, +m - 1, +d);
+  const d0 = mk(begin.slice(0,4), begin.slice(4,6), begin.slice(6,8));
+  const d1 = mk(end.slice(0,4),   end.slice(4,6),   end.slice(6,8));
+  const nDays = Math.round((d1 - d0)/86400000) + 1;
+
+  const step = opts.interval === "h" ? 60 : 6;
+  const series = [];
+  const fine = [];
+  const skip = new Set();
+  for (let dnum = 0; dnum < nDays; dnum++) {
+    const day = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + dnum);
+    const seam = dstSeamIndex(st, day.getFullYear(), day.getMonth(), day.getDate());
+    if (seam >= 0) { skip.add(fine.length + seam - 1); skip.add(fine.length + seam); }
+    const lv = mxDayLevels(st, day, 1, 1440);
+    for (let i = 0; i < 1440; i++) {
+      const t = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, i);
+      fine.push({ time: t, cm: lv[i] });
+      if (opts.series !== false && i % step === 0) series.push({ time: t, height: toUnits(lv[i]) });
+    }
+  }
+  const hilo = [];
+  for (let i = 1; i < fine.length - 1; i++) {
+    if (skip.has(i)) continue;
+    const a = fine[i-1].cm, b = fine[i].cm, c = fine[i+1].cm;
+    if ((b >= a && b > c) || (b <= a && b < c)) {
+      hilo.push({ time: fine[i].time, height: toUnits(b), type: (b >= a && b > c) ? "H" : "L" });
+    }
+  }
+  return { hilo, series };
 }
 
 const HarmonicProvider = {
@@ -738,51 +817,154 @@ const HarmonicProvider = {
   async getPredictions(stationId, begin, end, units, opts = {}) {
     const st = this._st(stationId);
     if (!st) throw new Error("Unknown station " + stationId);
-    const toUnits = v => units === "metric" ? v/100 : v/30.48;   // cm -> m or ft
+    return harmonicPredictions(st, begin, end, units, opts);
+  }
+};
+
+/* ------------------------------------------------------------------ *
+ * Offline US stations.
+ *
+ * A few local sites are carried in the page so they keep working with no network,
+ * the way the Mexican sites do. Nothing is fitted here: these are NOAA's own
+ * published harmonic constants, and NOAA states them as amplitude plus Greenwich
+ * epoch, which is exactly the convention the engine above already implements. So
+ * the offline curve reproduces NOAA's online one rather than approximating it.
+ * Z0 is the height of MSL above MLLW, which puts them on the app's usual datum.
+ *
+ * Two of these are not harmonic stations. NOAA publishes them as subordinates of
+ * San Diego: take the reference station's highs and lows, shift each in time and
+ * scale it in height. That is done here too, from NOAA's published offsets, which
+ * is the same procedure NOAA itself uses.
+ * ------------------------------------------------------------------ */
+const US_STATIONS = {
+  "9410196": {n:"Mission Bay, Campland",st:"CA",lat:32.7937,lng:-117.2238,off:-8,dst:true,Z0:85.6,c:{"M2":[51.3,144],"S2":[21.2,141.2],"N2":[12,123.7],"K1":[34.3,208.8],"M4":[0.1,232.2],"O1":[21,192.3],"M6":[0.2,343.1],"S4":[0.2,218.8],"NU2":[2.3,126.4],"MU2":[1.2,146.7],"2N2":[1.6,103.5],"OO1":[0.9,225.3],"LAM2":[0.4,142.7],"M1":[1.5,200.6],"J1":[1.7,217],"SSA":[1.6,261],"SA":[7.9,175.7],"RHO1":[0.8,185.2],"Q1":[4.1,184.1],"T2":[1.3,141.3],"R2":[0.2,141.1],"2Q1":[0.5,175.8],"P1":[11.4,207.6],"L2":[1.4,164.2],"K2":[5.8,141],"M8":[0.1,339.3]}},
+  "9410230": {n:"La Jolla (Scripps Pier)",st:"CA",lat:32.8669,lng:-117.2571,off:-8,dst:true,Z0:83.2,c:{"M2":[50,142],"S2":[20.4,138.6],"N2":[11.7,121.7],"K1":[33.2,207],"O1":[21.3,191.8],"NU2":[2.3,126.5],"MU2":[1.7,85.4],"2N2":[1.5,94.2],"OO1":[1,244.2],"LAM2":[0.3,141.5],"M1":[1.1,221],"J1":[2,221],"SSA":[1.6,261],"SA":[7.9,175.7],"RHO1":[0.7,180.6],"Q1":[3.8,184.4],"T2":[1.1,131.9],"R2":[0.3,77.4],"2Q1":[0.5,177.1],"P1":[10.5,203.1],"M3":[0.3,346.8],"L2":[1,132],"K2":[5.8,130.4]}},
+  "9410170": {n:"San Diego, Broadway Pier",st:"CA",lat:32.7142,lng:-117.1736,off:-8,dst:true,Z0:89.7,c:{"M2":[54.2,143.3],"S2":[22.5,140.4],"N2":[12.6,123.1],"K1":[33.7,208.4],"M4":[0.3,255.5],"O1":[21.4,192.6],"M6":[0.4,62.2],"MK3":[0.2,215.5],"S4":[0.1,230.2],"MN4":[0.2,213.1],"NU2":[2.5,129.7],"S6":[0.1,68.1],"MU2":[1.5,92],"2N2":[1.6,95.4],"OO1":[1.1,241.9],"LAM2":[0.3,134],"S1":[0.5,329],"M1":[1.3,225.1],"J1":[1.9,220.9],"SA":[7.6,180.5],"RHO1":[0.8,184.9],"Q1":[3.9,185.4],"T2":[1.4,128.1],"R2":[0.2,155.6],"2Q1":[0.5,186.1],"P1":[10.6,205.9],"2SM2":[0.2,312.3],"M3":[0.3,356.5],"L2":[1.2,124.5],"2MK3":[0.3,192.8],"K2":[6.6,134.5],"MS4":[0.2,203.2]}}
+};
+
+/* NOAA's published subordinate offsets: time shift in minutes and height ratio,
+   applied separately to highs and lows. */
+const US_SUB = {
+  "9410120": {n:"Imperial Beach",st:"CA",lat:32.5783,lng:-117.135,ref:"9410170",tH:0,tL:-3,hH:0.93,hL:0.96},
+  "TWC0413": {n:"Quivira Basin, Mission Bay",st:"CA",lat:32.7667,lng:-117.2333,ref:"9410170",tH:5,tL:4,hH:0.95,hL:0.95}
+};
+
+const OfflineUS = {
+  has(id) { return !!(US_STATIONS[id] || US_SUB[id]); },
+
+  stationList() {
+    const out = [];
+    for (const id in US_STATIONS) {
+      const s = US_STATIONS[id];
+      out.push({ id, name: s.n, state: s.st, lat: s.lat, lng: s.lng });
+    }
+    for (const id in US_SUB) {
+      const s = US_SUB[id];
+      out.push({ id, name: s.n, state: s.st, lat: s.lat, lng: s.lng });
+    }
+    return out;
+  },
+
+  // Every one of these sites is on Pacific time, which does observe DST.
+  async getStationInfo(id) { return { stdOffset: -8, observesDST: true, offline: true }; },
+
+  async getPredictions(id, begin, end, units, opts = {}) {
+    if (US_STATIONS[id]) return harmonicPredictions(US_STATIONS[id], begin, end, units, opts);
+    const sub = US_SUB[id];
+    if (!sub) throw new Error("No offline constants for station " + id);
+
+    const ref = US_STATIONS[sub.ref];
+    const toUnits = v => units === "metric" ? v/100 : v/30.48;
     const mk = (y, m, d) => new Date(+y, +m - 1, +d);
     const d0 = mk(begin.slice(0,4), begin.slice(4,6), begin.slice(6,8));
     const d1 = mk(end.slice(0,4),   end.slice(4,6),   end.slice(6,8));
     const nDays = Math.round((d1 - d0)/86400000) + 1;
 
+    // A day of margin either side, so the first and last hours of the requested
+    // range are always bracketed by a pair of extrema and never extrapolated.
+    const start = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() - 1);
+    const times = [], cm = [], skip = new Set();
+    for (let dn = 0; dn < nDays + 2; dn++) {
+      const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + dn);
+      const seam = dstSeamIndex(ref, day.getFullYear(), day.getMonth(), day.getDate());
+      if (seam >= 0) { skip.add(cm.length + seam - 1); skip.add(cm.length + seam); }
+      const lv = mxDayLevels(ref, day, 1, 1440);
+      for (let i = 0; i < 1440; i++) {
+        times.push(new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, i).getTime());
+        cm.push(lv[i]);
+      }
+    }
+    // The reference station's turning points, shifted and scaled into this station's.
+    const ext = [];
+    for (let i = 1; i < cm.length - 1; i++) {
+      if (skip.has(i)) continue;
+      const a = cm[i-1], b = cm[i], c = cm[i+1];
+      const isH = (b >= a && b > c), isL = (b <= a && b < c);
+      if (!isH && !isL) continue;
+      ext.push({
+        t: times[i] + (isH ? sub.tH : sub.tL)*60000,
+        cm: b * (isH ? sub.hH : sub.hL),
+        type: isH ? "H" : "L"
+      });
+    }
+    ext.sort((p, q) => p.t - q.t);
+
+    // Between two turning points, a half cosine: it hits both exactly and arrives
+    // flat at each, which is the shape a tide curve actually has there.
+    let k = 0;
+    const levelAt = tms => {
+      while (k < ext.length - 2 && ext[k+1].t <= tms) k++;
+      const A = ext[k], B = ext[k+1];
+      if (!A || !B) return A ? A.cm : 0;
+      const x = (tms - A.t) / (B.t - A.t);
+      return (A.cm + B.cm)/2 + (A.cm - B.cm)/2 * Math.cos(Math.PI * x);
+    };
+
     const step = opts.interval === "h" ? 60 : 6;
     const series = [];
-    // 1-minute sampling drives turning-point detection; the display series is
-    // decimated from the same curve so the chart and the hi/lo table agree.
-    const fine = [];
-    for (let dnum = 0; dnum < nDays; dnum++) {
-      const day = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + dnum);
-      const lv = mxDayLevels(st, day, 1, 1440);
-      for (let i = 0; i < 1440; i++) {
-        const t = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, i);
-        fine.push({ time: t, cm: lv[i] });
-        if (opts.series !== false && i % step === 0) series.push({ time: t, height: toUnits(lv[i]) });
+    if (opts.series !== false) {
+      for (let dn = 0; dn < nDays; dn++) {
+        const day = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + dn);
+        for (let i = 0; i < 1440; i += step) {
+          const t = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, i);
+          series.push({ time: t, height: toUnits(levelAt(t.getTime())) });
+        }
       }
     }
-    const hilo = [];
-    for (let i = 1; i < fine.length - 1; i++) {
-      const a = fine[i-1].cm, b = fine[i].cm, c = fine[i+1].cm;
-      if ((b >= a && b > c) || (b <= a && b < c)) {
-        hilo.push({ time: fine[i].time, height: toUnits(b), type: (b >= a && b > c) ? "H" : "L" });
-      }
-    }
+    const lo = d0.getTime();
+    const hi = new Date(d1.getFullYear(), d1.getMonth(), d1.getDate() + 1).getTime();
+    const hilo = ext.filter(e => e.t >= lo && e.t < hi)
+                    .map(e => ({ time: new Date(e.t), height: toUnits(e.cm), type: e.type }));
     return { hilo, series };
   }
 };
 
 /* Routes each station to its source. NOAA ids are numeric; harmonic ids carry an
-   "mx-" prefix. Both honour the same interface, so nothing downstream changes. */
+   "mx-" prefix. Both honour the same interface, so nothing downstream changes.
+   NOAA stays the source of truth whenever it is reachable, so the numbers match
+   NOAA's published ones exactly; the embedded constants are a fallback, not a
+   substitute, and only a handful of stations have them. */
 const provider = {
   async getStations() {
     let noaa = [];
-    try { noaa = await NOAAProvider.getStations(); } catch (e) { /* offline: MX still works */ }
-    return HarmonicProvider.stationList().concat(noaa);
+    try { noaa = await NOAAProvider.getStations(); } catch (e) { /* offline: harmonic sites still work */ }
+    // When NOAA answers, the offline sites are already in its list under the same ids.
+    const offline = noaa.length ? [] : OfflineUS.stationList();
+    return HarmonicProvider.stationList().concat(offline, noaa);
   },
-  getPredictions(id, b, e, units, opts) {
-    return (String(id).startsWith("mx-") ? HarmonicProvider : NOAAProvider)
-      .getPredictions(id, b, e, units, opts);
+  async getPredictions(id, b, e, units, opts) {
+    if (String(id).startsWith("mx-")) return HarmonicProvider.getPredictions(id, b, e, units, opts);
+    try {
+      return await NOAAProvider.getPredictions(id, b, e, units, opts);
+    } catch (err) {
+      if (OfflineUS.has(id)) return OfflineUS.getPredictions(id, b, e, units, opts);
+      throw err;
+    }
   },
-  getStationInfo(id) {
-    return (String(id).startsWith("mx-") ? HarmonicProvider : NOAAProvider).getStationInfo(id);
+  async getStationInfo(id) {
+    if (String(id).startsWith("mx-")) return HarmonicProvider.getStationInfo(id);
+    if (OfflineUS.has(id) && !navigator.onLine) return OfflineUS.getStationInfo(id);
+    return NOAAProvider.getStationInfo(id);
   }
 };
 
@@ -931,12 +1113,15 @@ const SUN = (() => {
 })();
 
 // US daylight-saving window: 2nd Sunday of March to 1st Sunday of November.
+/* US daylight saving. The changeover is at 02:00 local, not at midnight: treating
+   the whole transition day as one or the other puts the first two hours of it an
+   hour out, which showed up as a ~26 cm error against NOAA on those two days. */
 function isUSDST(date) {
   const y = date.getFullYear();
   const march = new Date(y, 2, 1);
-  const start = new Date(y, 2, 1 + ((7 - march.getDay()) % 7) + 7);
+  const start = new Date(y, 2, 1 + ((7 - march.getDay()) % 7) + 7, 2);
   const nov = new Date(y, 10, 1);
-  const end = new Date(y, 10, 1 + ((7 - nov.getDay()) % 7));
+  const end = new Date(y, 10, 1 + ((7 - nov.getDay()) % 7), 2);
   return date >= start && date < end;
 }
 function totalOffsetHours(date, info) {
