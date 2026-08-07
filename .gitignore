@@ -10,3 +10,4 @@ mac/Resources/Tides.iconset/
 .DS_Store
 __pycache__/
 *.pyc
+mac/dist/
