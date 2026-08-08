@@ -12,6 +12,7 @@
 import Cocoa
 import WebKit
 import UniformTypeIdentifiers
+import CoreLocation
 
 private let appScheme = "tides"
 private let appOrigin = "tides://app/"
@@ -90,15 +91,78 @@ final class DownloadHandler: NSObject, WKDownloadDelegate {
 
 // MARK: - Window
 
+/// Answers the page's request for a position, from CoreLocation.
+///
+/// WKWebView does not hand `navigator.geolocation` to a third-party app, so in the shell
+/// that API never resolves and the nearest-station button simply did nothing. Rather than
+/// fight that, the page asks the shell directly and the shell replies. The page keeps
+/// using the browser's own API everywhere else, so the web build is untouched.
+///
+/// The app also has to declare NSLocationWhenInUseUsageDescription, or macOS will not
+/// offer it to Location Services at all and it never appears in System Settings.
+final class LocationBridge: NSObject, CLLocationManagerDelegate, WKScriptMessageHandlerWithReply {
+    private let manager = CLLocationManager()
+    private var pending: [(Any?, String?) -> Void] = []
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        // A tide station, not a doorstep. Coarse accuracy answers faster and is plenty
+        // to pick the nearest of 3,500 stations.
+        manager.desiredAccuracy = kCLLocationAccuracyKilometer
+    }
+
+    func userContentController(_ ucc: WKUserContentController,
+                               didReceive message: WKScriptMessage,
+                               replyHandler: @escaping (Any?, String?) -> Void) {
+        pending.append(replyHandler)
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()   // prompt; picked up by the delegate below
+        case .denied, .restricted:
+            finish(error: "Location is off for this app. Turn it on in System Settings, "
+                        + "Privacy & Security, Location Services.")
+        default:
+            manager.requestLocation()
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ m: CLLocationManager) {
+        switch m.authorizationStatus {
+        case .notDetermined: break
+        case .denied, .restricted: finish(error: "Location permission was declined.")
+        default: if !pending.isEmpty { m.requestLocation() }
+        }
+    }
+
+    func locationManager(_ m: CLLocationManager, didUpdateLocations locs: [CLLocation]) {
+        guard let c = locs.last?.coordinate else { finish(error: "No position available."); return }
+        let handlers = pending; pending = []
+        handlers.forEach { $0(["lat": c.latitude, "lng": c.longitude], nil) }
+    }
+
+    func locationManager(_ m: CLLocationManager, didFailWithError error: Error) {
+        finish(error: error.localizedDescription)
+    }
+
+    private func finish(error: String) {
+        let handlers = pending; pending = []
+        handlers.forEach { $0(nil, error) }
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate {
     private var window: NSWindow!
     private var webView: WKWebView!
     private let downloads = DownloadHandler()
+    private let locator = LocationBridge()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let config = WKWebViewConfiguration()
         config.setURLSchemeHandler(BundleSchemeHandler(), forURLScheme: appScheme)
         config.websiteDataStore = .default()          // keeps localStorage: favourites, units, elevation
+        config.userContentController.addScriptMessageHandler(
+            locator, contentWorld: .page, name: "locate")
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self

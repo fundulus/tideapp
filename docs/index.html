@@ -1684,19 +1684,36 @@ function renderResults(list, showDist) {
   resultsEl.classList.add("show");
 }
 
-locbtn.addEventListener("click", () => {
-  if (!navigator.geolocation) { alert("Geolocation is not available in this browser."); return; }
+/* Where to get a position. The native shells answer this themselves from CoreLocation,
+   because WKWebView does not hand navigator.geolocation to a third-party app and it
+   simply never resolves there. In a browser the standard API is used unchanged. */
+function currentPosition() {
+  const bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.locate;
+  if (bridge) {
+    return bridge.postMessage(null).then(p => ({ latitude: p.lat, longitude: p.lng }));
+  }
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error("Geolocation is not available here.")); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      err => reject(new Error(err.message)),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 });
+  });
+}
+
+locbtn.addEventListener("click", async () => {
   locbtn.textContent = "…";
-  navigator.geolocation.getCurrentPosition(async pos => {
+  try {
+    const pos = await currentPosition();
+    const stations = await provider.getStations();
+    searchEl.value = "";
+    renderResults(nearest(stations, pos.latitude, pos.longitude, 8), true);
+    searchEl.focus();
+  } catch (err) {
+    alert("Location unavailable: " + (err && err.message ? err.message : err));
+  } finally {
     locbtn.textContent = "📍";
-    try {
-      const stations = await provider.getStations();
-      searchEl.value = "";
-      renderResults(nearest(stations, pos.coords.latitude, pos.coords.longitude, 8), true);
-      searchEl.focus();
-    } catch (err) { alert("Could not find nearby stations: " + err.message); }
-  }, err => { locbtn.textContent = "📍"; alert("Location unavailable: " + err.message); },
-     { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 });
+  }
 });
 
 function selectStation(s) {

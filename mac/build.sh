@@ -50,6 +50,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <!-- Without a usage string macOS will not even offer the app to Location Services,
+       so the nearest-station button silently does nothing and the app never appears
+       in System Settings. -->
+  <key>NSLocationWhenInUseUsageDescription</key><string>$NAME uses your location only to find the nearest tide station. It is never stored or sent anywhere.</string>
+  <key>NSLocationUsageDescription</key><string>$NAME uses your location only to find the nearest tide station. It is never stored or sent anywhere.</string>
   <key>NSHumanReadableCopyright</key><string>Tide predictions from NOAA CO-OPS and CICESE-derived harmonics. Not for navigation.</string>
 $( [[ -f Resources/AppIcon.icns ]] && echo "  <key>CFBundleIconFile</key><string>AppIcon</string>" )
 </dict>
