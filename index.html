@@ -414,6 +414,10 @@
   /* Caution rather than description: this station's predictions deserve less trust. */
   .srcchip.warn { background: rgba(190,120,40,.28); color: #8B5416; }
   .srcchip.warn:hover { background: rgba(190,120,40,.4); }
+  /* An action rather than a warning, so it reads in the app's own colour. */
+  .srcchip.savechip { background: rgba(45,85,95,.12); color: var(--teal); }
+  .srcchip.savechip:hover { background: rgba(45,85,95,.2); }
+  .srcchip[disabled] { opacity: .6; cursor: default; }
 
   /* Touch and safe-area handling, last so it wins over the narrow-screen block above.
      The page runs edge to edge under the status bar, Dynamic Island and home
@@ -465,7 +469,11 @@
 <header class="appbar">
   <div class="brand">
     <h1>TIDES</h1>
-    <span class="sub">NOAA predictions</span>
+    <!-- Deliberately not "NOAA predictions". Four stations are not NOAA's at all, any
+         station can now be computed here when offline, and putting a federal agency's
+         name under the title implies an endorsement that does not exist. Provenance
+         belongs per station, where it is actually true, not in the masthead. -->
+    <span class="sub">sun, moon and water</span>
     <svg class="fishmark" viewBox="0 0 200 78.7" aria-hidden="true" focusable="false"><use href="#fishmark"/></svg>
   </div>
   <div class="searchwrap">
@@ -610,6 +618,12 @@
     height, and publishes no continuous curve.</p>
 
     <h3>Working without a connection</h3>
+    <p><b>Any station can be kept offline.</b> Open it and press <b>keep offline</b> beside
+    the station number. The app pulls down NOAA's published harmonic constants for that
+    station, stores them on the device, and from then on it computes there with no
+    connection at all, for any date. Useful when you already know the site you are heading
+    to has no signal. Press it again to remove it. Subordinate stations work too: their
+    reference station is fetched and kept alongside them automatically.</p>
     <p>The four Mexican sites need no network at all, and five San Diego sites are carried in
     the page the same way, so they keep working out of signal: <b>Mission Bay (Campland)</b>,
     <b>Quivira Basin (Mission Bay)</b>, <b>La Jolla</b>, <b>Imperial Beach</b> and
@@ -1063,8 +1077,120 @@ const StationQuality = {
   }
 };
 
+/* ------------------------------------------------------------------ *
+ * Stations the user has chosen to keep offline.
+ *
+ * The five built-in sites cover Drew's own patch, but the general case is "I am going
+ * to station X next week and there is no signal there". Pulling NOAA's harmonic
+ * constants for a station is a couple of small requests, and once they are in
+ * localStorage that station computes on the device forever, for any date, exactly the
+ * way the built-in ones do.
+ *
+ * A subordinate station has no constants of its own, so its reference station is
+ * fetched and kept alongside it, marked as a helper so it does not clutter the list.
+ * ------------------------------------------------------------------ */
+const MDAPI = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/";
+
+const SavedOffline = {
+  KEY: "tide.offline.v1",
+  _m: null,
+
+  _load() {
+    if (!this._m) {
+      try { this._m = JSON.parse(localStorage.getItem(this.KEY) || "{}"); }
+      catch (e) { this._m = {}; }
+    }
+    return this._m;
+  },
+  _persist() { localStorage.setItem(this.KEY, JSON.stringify(this._m)); },
+
+  entry(id) { return this._load()[String(id)] || null; },
+  isSaved(id) { const e = this.entry(id); return !!(e && !e.helper); },
+  list() {
+    const m = this._load();
+    return Object.keys(m).filter(k => !m[k].helper)
+      .map(k => ({ id: k, name: m[k].n, state: m[k].st, lat: m[k].lat, lng: m[k].lng }));
+  },
+  count() { return this.list().length; },
+
+  forget(id) {
+    const m = this._load(), e = m[String(id)];
+    if (e && e.ref) {
+      // Drop the reference station too, unless another saved station still needs it.
+      const stillUsed = Object.keys(m).some(k => k !== String(id) && m[k].ref === e.ref);
+      if (!stillUsed && m[e.ref] && m[e.ref].helper) delete m[e.ref];
+    }
+    delete m[String(id)];
+    this._persist();
+  },
+
+  async _harmonic(id) {
+    const r = await fetch(MDAPI + encodeURIComponent(id) + "/harcon.json?units=metric");
+    const d = await r.json();
+    const list = (d.HarmonicConstituents || []).filter(x => x.amplitude > 0);
+    if (!list.length) return null;                       // subordinate station
+    const c = {};
+    for (const x of list) {
+      const nm = x.name === "RHO" ? "RHO1" : x.name;     // NOAA's spelling of RHO1
+      if (MX_DOODSON[nm]) c[nm] = [+(x.amplitude * 100).toFixed(3), +x.phase_GMT.toFixed(2)];
+    }
+    // Constants are stated about MSL; Z0 puts them on MLLW like everything else here.
+    const dr = await fetch(MDAPI + encodeURIComponent(id) + "/datums.json?units=metric");
+    const dd = await dr.json();
+    const dat = {};
+    for (const x of (dd.datums || [])) dat[x.name] = x.value;
+    if (typeof dat.MSL !== "number" || typeof dat.MLLW !== "number") {
+      throw new Error("NOAA does not publish the datums needed to place this station on MLLW.");
+    }
+    return { Z0: +((dat.MSL - dat.MLLW) * 100).toFixed(2), c };
+  },
+
+  async add(st) {
+    const id = String(st.id);
+    const zone = await NOAAProvider.getStationInfo(id);
+    const meta = { n: st.name, st: st.state || "", lat: st.lat, lng: st.lng,
+                   off: zone.stdOffset, dst: zone.observesDST };
+    const m = this._load();
+    const harm = await this._harmonic(id);
+    if (harm) {
+      m[id] = Object.assign(meta, harm);
+    } else {
+      const r = await fetch(MDAPI + encodeURIComponent(id) + "/tidepredoffsets.json");
+      const o = await r.json();
+      if (o.heightAdjustedType && o.heightAdjustedType !== "R") {
+        throw new Error("NOAA adjusts this station's heights in a way this app does not yet reproduce.");
+      }
+      const refId = String(o.refStationId || "");
+      const refHarm = refId ? await this._harmonic(refId) : null;
+      if (!refHarm) throw new Error("NOAA publishes no constants for this station or its reference.");
+      if (!m[refId]) {
+        const rz = await NOAAProvider.getStationInfo(refId);
+        m[refId] = Object.assign({ n: "reference for " + st.name, st: "", lat: st.lat, lng: st.lng,
+                                   off: rz.stdOffset, dst: rz.observesDST, helper: true }, refHarm);
+      }
+      m[id] = Object.assign(meta, { ref: refId,
+        tH: o.timeOffsetHighTide || 0, tL: o.timeOffsetLowTide || 0,
+        hH: o.heightOffsetHighTide || 1, hL: o.heightOffsetLowTide || 1 });
+    }
+    this._m = m;
+    this._persist();
+  }
+};
+
+/* Either source of constants, built in or saved by the user, looks the same downstream. */
+function offlineHarmonic(id) {
+  if (US_STATIONS[id]) return US_STATIONS[id];
+  const e = SavedOffline.entry(id);
+  return (e && e.c) ? e : null;
+}
+function offlineSubordinate(id) {
+  if (US_SUB[id]) return US_SUB[id];
+  const e = SavedOffline.entry(id);
+  return (e && e.ref) ? e : null;
+}
+
 const OfflineUS = {
-  has(id) { return !!(US_STATIONS[id] || US_SUB[id]); },
+  has(id) { return !!(offlineHarmonic(id) || offlineSubordinate(id)); },
 
   stationList() {
     const out = [];
@@ -1076,18 +1202,28 @@ const OfflineUS = {
       const s = US_SUB[id];
       out.push({ id, name: s.n, state: s.st, lat: s.lat, lng: s.lng });
     }
+    const seen = new Set(out.map(s => s.id));
+    for (const s of SavedOffline.list()) if (!seen.has(s.id)) out.push(s);
     return out;
   },
 
-  // Every one of these sites is on Pacific time, which does observe DST.
-  async getStationInfo(id) { return { stdOffset: -8, observesDST: true, offline: true }; },
+  // The built-in sites are all Pacific; a saved station carries its own zone.
+  async getStationInfo(id) {
+    const s = offlineHarmonic(id) || offlineSubordinate(id);
+    if (s && typeof s.off === "number") {
+      return { stdOffset: s.off, observesDST: !!s.dst, offline: true };
+    }
+    return { stdOffset: -8, observesDST: true, offline: true };
+  },
 
   async getPredictions(id, begin, end, units, opts = {}) {
-    if (US_STATIONS[id]) return harmonicPredictions(US_STATIONS[id], begin, end, units, opts);
-    const sub = US_SUB[id];
+    const harm = offlineHarmonic(id);
+    if (harm) return harmonicPredictions(harm, begin, end, units, opts);
+    const sub = offlineSubordinate(id);
     if (!sub) throw new Error("No offline constants for station " + id);
 
-    const ref = US_STATIONS[sub.ref];
+    const ref = offlineHarmonic(sub.ref);
+    if (!ref) throw new Error("The reference station's constants are not available offline.");
     const toUnits = v => units === "metric" ? v/100 : v/30.48;
     const mk = (y, m, d) => new Date(+y, +m - 1, +d);
     const d0 = mk(begin.slice(0,4), begin.slice(4,6), begin.slice(6,8));
@@ -1902,7 +2038,7 @@ function shell() {
     <div class="stationhead">
       <div>
         <div class="name">${escapeHtml(st.name)}</div>
-        <div class="coords">${st.state ? escapeHtml(st.state) + " · " : ""}${st.lat.toFixed(3)}, ${st.lng.toFixed(3)} · Station #${st.id}<span id="srcChipSlot"></span><span id="offChipSlot"></span></div>
+        <div class="coords">${st.state ? escapeHtml(st.state) + " · " : ""}${st.lat.toFixed(3)}, ${st.lng.toFixed(3)} · Station #${st.id}<span id="srcChipSlot"></span><span id="offChipSlot"></span><span id="offlineSaveSlot"></span></div>
       </div>
       <div class="left" style="gap:12px">
         <div class="seg" id="viewSeg">
@@ -2005,6 +2141,7 @@ async function renderDay() {
   // is a connection and this app's arithmetic when there is not.
   state.servedOffline = !!pred.offline;
   updateOfflineChip();
+  updateOfflineSaveBtn();
   const content = document.getElementById("content");
   if (!hilo.length && !series.length) {
     content.innerHTML = '<div class="status">No predictions available for this range.</div>';
@@ -2872,6 +3009,7 @@ async function renderCalendar() {
   }
   state.servedOffline = !!pred.offline;
   updateOfflineChip();
+  updateOfflineSaveBtn();
   let info = null;
   try { info = state.info = await provider.getStationInfo(st.id); } catch (e) { /* shading optional */ }
   paintCalendar(pred.hilo, gridStart, info);
@@ -3325,6 +3463,42 @@ function openNote(title, body) {
   document.body.style.overflow = "hidden";
 }
 function closeNote() { noteModal.hidden = true; document.body.style.overflow = ""; }
+
+/* Lets any NOAA station be pulled down and kept on the device. The built-in sites and
+   the Mexican ones already work offline, so they are not offered the option. */
+function updateOfflineSaveBtn() {
+  const slot = document.getElementById("offlineSaveSlot");
+  if (!slot) return;
+  const st = state.station;
+  if (!st) { slot.innerHTML = ""; return; }
+  const id = String(st.id);
+  if (id.startsWith("mx-") || US_STATIONS[id] || US_SUB[id]) { slot.innerHTML = ""; return; }
+
+  const saved = SavedOffline.isSaved(id);
+  slot.innerHTML = '<button class="srcchip savechip" id="offlineSaveBtn">' +
+                   (saved ? "kept offline" : "keep offline") + "</button>";
+  const btn = document.getElementById("offlineSaveBtn");
+  btn.title = saved ? "Stored on this device. Click to remove."
+                    : "Store this station's tide constants on this device";
+  btn.onclick = async () => {
+    if (saved) { SavedOffline.forget(id); updateOfflineSaveBtn(); return; }
+    btn.textContent = "saving"; btn.disabled = true;
+    try {
+      await SavedOffline.add(st);
+      updateOfflineSaveBtn();
+      openNote("Kept offline", st.name + " now computes on this device and needs no " +
+        "connection, for any date. NOAA is still used whenever it can be reached; these " +
+        "constants are the fallback. They are NOAA's own published constants, so an " +
+        "offline figure reproduces the online one to about half a centimetre and two " +
+        "minutes on a typical high or low.");
+    } catch (e) {
+      btn.disabled = false;
+      updateOfflineSaveBtn();
+      openNote("Could not keep this station offline", (e && e.message) ? e.message :
+        "The constants could not be fetched. Check the connection and try again.");
+    }
+  };
+}
 
 /* Marks the figures as this app's arithmetic rather than NOAA's. This is a property of
    the request, not of the station: the same site is NOAA's when there is a connection
