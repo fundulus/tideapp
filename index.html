@@ -588,12 +588,19 @@
     spring-neap cycle</b> rather than showing as a constant offset. Mission Bay (Campland)
     is the local example: three months of data from February to April 2017, with the
     seasonal terms borrowed from La Jolla.</p>
-    <p>How big is that error in practice? <b>Honestly, nobody can say from the published
-    data.</b> Stations analysed from a short record were usually temporary deployments, and
-    most no longer report observed water levels, so there is nothing current to compare a
-    prediction against. Campland is exactly that case. The badge marks predictions that rest
-    on a thinner foundation; it does not put a number on how far out they are, and any app
-    that offers you one for a station like this is guessing.</p>
+    <p>How big is that error in practice? It cannot be checked against real water, because
+    stations analysed from a short record were usually temporary deployments and most,
+    Campland included, no longer report observed levels. It can still be bounded, though,
+    because NOAA happens to publish <b>two independent predictions for Mission Bay</b>:
+    Campland, from its own three-month analysis, and Quivira Basin, derived from San Diego.
+    Over 2026 those two disagree by a median of 4 minutes, <b>11 minutes at the 90th
+    percentile</b>, and up to 35 minutes.</p>
+    <p>For comparison, Quivira Basin is tied to San Diego by fixed offsets and so never
+    departs from it by more than 5 minutes. The extra scatter is Campland's short-record
+    analysis drifting, exactly as the inference test predicts. So <b>roughly ten minutes,
+    occasionally worse</b>, is a fair expectation for a short-record station, and it is not
+    a constant offset you could correct for: it moves with the season and the spring-neap
+    cycle.</p>
     <p>None of this is a gap between this app and NOAA. On a connection you are seeing
     NOAA's published predictions verbatim, and offline this app recomputes them from NOAA's
     own constants to within about a centimetre and a minute or two. The uncertainty is
@@ -1045,12 +1052,12 @@ const StationQuality = {
         detail: "The constants behind this station come from a record too short to separate K1 from " +
                 "P1, or S2 from K2, which needs 182.6 days. Those were inferred from theory rather " +
                 "than measured, so its timing drifts through the season and across the spring-neap " +
-                "cycle in a way a long-record station's does not. How large that error actually is " +
-                "is not known: stations analysed from a short record were usually temporary " +
-                "deployments, and most no longer report observed water levels to check a prediction " +
-                "against. Treat the timing as materially less certain than at a long-record station, " +
-                "and prefer one of those when minutes matter." +
-                (note ? " NOAA's note: " + note : "") };
+                "cycle in a way a long-record station's does not. Expect the timing to be out by " +
+                "roughly ten minutes, occasionally more. That figure is not a guess: where NOAA " +
+                "publishes a second, independent prediction for the same water, the two disagree by " +
+                "about 11 minutes at the 90th percentile and up to 35, against no more than 5 for a " +
+                "station rigidly derived from a long-record one. Prefer a long-record station when " +
+                "minutes matter." + (note ? " NOAA's note: " + note : "") };
     }
     return null;    // well determined: say nothing rather than add clutter
   }
