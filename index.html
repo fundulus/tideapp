@@ -1210,7 +1210,11 @@ const provider = {
       }
       return r;
     } catch (err) {
-      if (OfflineUS.has(id)) return OfflineUS.getPredictions(id, b, e, units, opts);
+      if (OfflineUS.has(id)) {
+        const r = await OfflineUS.getPredictions(id, b, e, units, opts);
+        r.offline = true;      // computed here because NOAA could not be reached
+        return r;
+      }
       throw err;
     }
   },
@@ -1874,7 +1878,7 @@ function shell() {
     <div class="stationhead">
       <div>
         <div class="name">${escapeHtml(st.name)}</div>
-        <div class="coords">${st.state ? escapeHtml(st.state) + " · " : ""}${st.lat.toFixed(3)}, ${st.lng.toFixed(3)} · Station #${st.id}<span id="srcChipSlot"></span></div>
+        <div class="coords">${st.state ? escapeHtml(st.state) + " · " : ""}${st.lat.toFixed(3)}, ${st.lng.toFixed(3)} · Station #${st.id}<span id="srcChipSlot"></span><span id="offChipSlot"></span></div>
       </div>
       <div class="left" style="gap:12px">
         <div class="seg" id="viewSeg">
@@ -1972,6 +1976,11 @@ async function renderDay() {
     return;
   }
   const { hilo, series } = pred;
+  // Whether these numbers came from NOAA or were computed here because it was
+  // unreachable. Per request, not per station: the same station is NOAA's when there
+  // is a connection and this app's arithmetic when there is not.
+  state.servedOffline = !!pred.offline;
+  updateOfflineChip();
   const content = document.getElementById("content");
   if (!hilo.length && !series.length) {
     content.innerHTML = '<div class="status">No predictions available for this range.</div>';
@@ -2837,6 +2846,8 @@ async function renderCalendar() {
       '<div class="status err">Could not load predictions: ' + escapeHtml(err.message) + "</div>";
     return;
   }
+  state.servedOffline = !!pred.offline;
+  updateOfflineChip();
   let info = null;
   try { info = state.info = await provider.getStationInfo(st.id); } catch (e) { /* shading optional */ }
   paintCalendar(pred.hilo, gridStart, info);
@@ -3290,6 +3301,25 @@ function openNote(title, body) {
   document.body.style.overflow = "hidden";
 }
 function closeNote() { noteModal.hidden = true; document.body.style.overflow = ""; }
+
+/* Marks the figures as this app's arithmetic rather than NOAA's. This is a property of
+   the request, not of the station: the same site is NOAA's when there is a connection
+   and computed here when there is not, so the badge comes and goes with the network. */
+function updateOfflineChip() {
+  const slot = document.getElementById("offChipSlot");
+  if (!slot) return;
+  if (!state.servedOffline) { slot.innerHTML = ""; return; }
+  slot.innerHTML = '<button class="srcchip warn" id="offChip">offline estimate</button>';
+  document.getElementById("offChip").onclick = () => openNote("Offline estimate",
+    "There is no connection, so these are not NOAA's published predictions. They are " +
+    "computed here from NOAA's own harmonic constants for this station, which is why it " +
+    "works at all with no signal. Scored against a full year of NOAA's 2026 predictions, " +
+    "this reproduces them to about half a centimetre and two minutes on a typical high or " +
+    "low. The worst single tide in that year was 17 minutes out, which happens where a " +
+    "turning point is so flat that its exact moment is barely defined, and where the " +
+    "height is therefore barely changing either. Reconnect and the figures revert to " +
+    "NOAA's own.");
+}
 document.getElementById("noteClose").onclick = closeNote;
 document.getElementById("noteMore").onclick = () => { closeNote(); openAbout(); };
 noteModal.addEventListener("click", e => { if (e.target === noteModal) closeNote(); });
