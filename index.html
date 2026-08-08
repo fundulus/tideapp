@@ -587,8 +587,17 @@
     months, so inferring them produces timing error that <b>drifts with the season and the
     spring-neap cycle</b> rather than showing as a constant offset. Mission Bay (Campland)
     is the local example: three months of data from February to April 2017, with the
-    seasonal terms borrowed from La Jolla. Treat its times as good to 10 or 15 minutes,
-    against roughly 2 at San Diego or La Jolla.</p>
+    seasonal terms borrowed from La Jolla.</p>
+    <p>How big is that error in practice? <b>Honestly, nobody can say from the published
+    data.</b> Stations analysed from a short record were usually temporary deployments, and
+    most no longer report observed water levels, so there is nothing current to compare a
+    prediction against. Campland is exactly that case. The badge marks predictions that rest
+    on a thinner foundation; it does not put a number on how far out they are, and any app
+    that offers you one for a station like this is guessing.</p>
+    <p>None of this is a gap between this app and NOAA. On a connection you are seeing
+    NOAA's published predictions verbatim, and offline this app recomputes them from NOAA's
+    own constants to within about a centimetre and a minute or two. The uncertainty is
+    shared, because the constants are shared.</p>
     <p><b>Subordinate station.</b> Not measured in its own right at all. NOAA predicts it
     from a nearby reference station by shifting each high and low in time and scaling it in
     height, and publishes no continuous curve.</p>
@@ -1036,8 +1045,12 @@ const StationQuality = {
         detail: "The constants behind this station come from a record too short to separate K1 from " +
                 "P1, or S2 from K2, which needs 182.6 days. Those were inferred from theory rather " +
                 "than measured, so its timing drifts through the season and across the spring-neap " +
-                "cycle in a way a long-record station's does not. Treat the times as good to about " +
-                "10 to 15 minutes rather than 2." + (note ? " NOAA's note: " + note : "") };
+                "cycle in a way a long-record station's does not. How large that error actually is " +
+                "is not known: stations analysed from a short record were usually temporary " +
+                "deployments, and most no longer report observed water levels to check a prediction " +
+                "against. Treat the timing as materially less certain than at a long-record station, " +
+                "and prefer one of those when minutes matter." +
+                (note ? " NOAA's note: " + note : "") };
     }
     return null;    // well determined: say nothing rather than add clutter
   }
