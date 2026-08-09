@@ -58,7 +58,8 @@
     z-index: 30;
     box-shadow: 0 2px 10px rgba(31,61,69,.18);
   }
-  .brand { display: flex; align-items: baseline; gap: 10px; flex: 0 0 auto; }
+  .brand { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; flex: 0 0 auto; }
+  .brandline { display: flex; align-items: baseline; gap: 10px; }
   .brand h1 { font-size: 20px; font-weight: 800; letter-spacing: .5px; margin: 0; }
   .brand .sub { font-size: 12px; color: #cfe0dd; font-weight: 400; }
 
@@ -472,13 +473,15 @@
 </svg>
 <header class="appbar">
   <div class="brand">
-    <h1>TIDES</h1>
+    <div class="brandline">
+      <h1>TIDES</h1>
+      <svg class="fishmark" viewBox="0 0 200 78.7" aria-hidden="true" focusable="false"><use href="#fishmark"/></svg>
+    </div>
     <!-- Deliberately not "NOAA predictions". Four stations are not NOAA's at all, any
          station can now be computed here when offline, and putting a federal agency's
          name under the title implies an endorsement that does not exist. Provenance
          belongs per station, where it is actually true, not in the masthead. -->
-    <span class="sub">sun, moon and water</span>
-    <svg class="fishmark" viewBox="0 0 200 78.7" aria-hidden="true" focusable="false"><use href="#fishmark"/></svg>
+    <span class="sub">sun, moon, &amp; water level data</span>
   </div>
   <div class="searchwrap">
     <div class="searchrow">
