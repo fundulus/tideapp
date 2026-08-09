@@ -58,7 +58,8 @@
     z-index: 30;
     box-shadow: 0 2px 10px rgba(31,61,69,.18);
   }
-  .brand { display: flex; align-items: baseline; gap: 10px; flex: 0 0 auto; }
+  .brand { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; flex: 0 0 auto; }
+  .brandline { display: flex; align-items: baseline; gap: 10px; }
   .brand h1 { font-size: 20px; font-weight: 800; letter-spacing: .5px; margin: 0; }
   .brand .sub { font-size: 12px; color: #cfe0dd; font-weight: 400; }
 
@@ -305,7 +306,11 @@
   .moonchip svg { display: block; }
 
   .chartwrap { width: 100%; overflow: hidden; }
-  svg.chart { width: 100%; height: auto; display: block; }
+  svg.chart { width: 100%; height: auto; display: block; touch-action: none; }
+  .chart-hint { font-size: 11.5px; color: var(--muted); text-align: center; margin-top: 6px; }
+  #scrubTip { position: fixed; display: none; z-index: 40; pointer-events: none;
+    background: var(--teal); color: var(--paper); font-size: 12px; font-weight: 700;
+    padding: 4px 8px; border-radius: 7px; white-space: nowrap; box-shadow: 0 4px 14px rgba(31,61,69,.28); }
 
   table.tides { width: 100%; border-collapse: collapse; }
   table.tides th, table.tides td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 15px; }
@@ -468,13 +473,15 @@
 </svg>
 <header class="appbar">
   <div class="brand">
-    <h1>TIDES</h1>
+    <div class="brandline">
+      <h1>TIDES</h1>
+      <svg class="fishmark" viewBox="0 0 200 78.7" aria-hidden="true" focusable="false"><use href="#fishmark"/></svg>
+    </div>
     <!-- Deliberately not "NOAA predictions". Four stations are not NOAA's at all, any
          station can now be computed here when offline, and putting a federal agency's
          name under the title implies an endorsement that does not exist. Provenance
          belongs per station, where it is actually true, not in the masthead. -->
-    <span class="sub">sun, moon and water</span>
-    <svg class="fishmark" viewBox="0 0 200 78.7" aria-hidden="true" focusable="false"><use href="#fishmark"/></svg>
+    <span class="sub">sun, moon, &amp; water level data</span>
   </div>
   <div class="searchwrap">
     <div class="searchrow">
@@ -2167,8 +2174,121 @@ async function renderDay() {
     '<div id="tideCards">' + nextTideCard(hilo, day0, series) + '</div>' +
     (state.days === 1 ? sunRow(sun[0]) : "") +
     dstCautionBar(dstCautionDays(spanDays)) +
-    '<div class="card"><div class="chartwrap">' + chartSVG(series, hilo, day0, state.days, sun) + "</div></div>" +
+    '<div class="card"><div class="chartwrap">' + chartSVG(series, hilo, day0, state.days, sun) + "</div>" +
+      '<div class="chart-hint">Hover the curve to read the tide at any moment' +
+      (state.days > 1 ? "; double-click a day to open it" : "") + ".</div></div>" +
     tideTable(hilo, day0, sun);
+  wireDayInteractions();
+}
+
+/* Switch to a single-day view of a specific day. This is the shared target for
+   double-clicking a day anywhere: a calendar cell, a day in the multi-day chart,
+   or a day heading in the multi-day table. */
+function goToDay(date) {
+  state.date = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  state.view = "day"; state.days = 1;
+  localStorage.setItem("tide.view", "day"); localStorage.setItem("tide.days", "1");
+  render();
+}
+
+/* Wire the day-view interactions after its HTML is in the DOM: the live readout
+   that follows the pointer across the chart, double-click-to-open on the chart,
+   and double-click-to-open on each day heading in the multi-day table. */
+function wireDayInteractions() {
+  const svg = document.querySelector("#content .chart");
+  if (svg && chartGeom) attachScrub(svg, chartGeom);
+  document.querySelectorAll("#content tr.dayrow[data-date]").forEach(tr => {
+    tr.ondblclick = () => {
+      const s = tr.dataset.date;
+      goToDay(new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8)));
+    };
+  });
+}
+
+/* The crosshair drawn inside a uniformly-scaled chart SVG: a vertical guide, a
+   dot on the curve, and a haloed readout that flips side near the right edge. */
+function scrubMarks(x, y, topY, botY, label, W) {
+  const left = x < W * 0.5;
+  return `<line x1="${x.toFixed(1)}" y1="${topY}" x2="${x.toFixed(1)}" y2="${botY}" stroke="#2D555F" stroke-width="1" opacity="0.45"/>` +
+    `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="#2D555F" stroke="#F8F8F5" stroke-width="1.5"/>` +
+    `<text x="${(left ? x+8 : x-8).toFixed(1)}" y="${(topY+11).toFixed(1)}" text-anchor="${left?"start":"end"}" font-size="12" font-weight="700" fill="#2D555F" style="paint-order:stroke;stroke:#F8F8F5;stroke-width:3.5px;stroke-linejoin:round">${escapeHtml(label)}</text>`;
+}
+
+/* Live scrubber for a uniformly-scaled time chart (day view or the inundation
+   curve). As the pointer moves, drop a crosshair on the curve and read out the
+   time and height at that instant. When g.navDay is set, double-click opens the
+   day under the pointer. Pointer events cover mouse, pen and touch-drag alike.
+   g gives the time origin (t0 ms + totalMs), the plot box, yOf and interp. */
+function attachScrub(svg, g) {
+  const layer = svg.querySelector(".scrublayer");
+  if (!layer) return;
+  const plotW = g.W - g.padL - g.padR;
+  const pointerTime = e => {
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+    const loc = p.matrixTransform(ctm.inverse());
+    const x = Math.max(g.padL, Math.min(g.W - g.padR, loc.x));
+    return { x, t: new Date(g.t0 + (x - g.padL) / plotW * g.totalMs) };
+  };
+  const draw = e => {
+    const pt = pointerTime(e); if (!pt) return;
+    const h = g.interp(pt.t), y = g.yOf(h);
+    const label = (g.multiday ? pt.t.toLocaleDateString(undefined,{weekday:"short"}) + " " : "") +
+      fmtTime(pt.t) + "   " + fmtHeight(h) + " " + unitLabel();
+    layer.innerHTML = scrubMarks(pt.x, y, g.padT, g.H - g.padB, label, g.W);
+  };
+  svg.addEventListener("pointermove", draw);
+  svg.addEventListener("pointerdown", draw);
+  svg.addEventListener("pointerleave", () => { layer.innerHTML = ""; });
+  if (g.navDay) svg.addEventListener("dblclick", e => {
+    const pt = pointerTime(e); if (!pt) return;
+    goToDay(pt.t);
+  });
+}
+
+/* Scrubber for the calendar's week strips. Each week's curve is a separate SVG
+   drawn with preserveAspectRatio="none", so its own text would stretch; the
+   crosshair (vertical line + dot) still reads fine, and the numeric value goes
+   in a shared floating tooltip near the pointer instead. Only the top strip (the
+   curve band) is live; moving down into a day's tide list clears it. */
+function scrubTipEl() {
+  let el = document.getElementById("scrubTip");
+  if (!el) { el = document.createElement("div"); el.id = "scrubTip"; document.body.appendChild(el); }
+  return el;
+}
+function attachCalendarScrub() {
+  if (!calGeom) return;
+  const W = 700, H = 74, weekMs = 7 * 86400000;
+  const tip = scrubTipEl();
+  const hide = () => { tip.style.display = "none"; };
+  document.querySelectorAll(".calweek").forEach(week => {
+    const svg = week.querySelector(".calcurve");
+    const layer = svg && svg.querySelector(".wkscrub");
+    if (!layer) return;
+    const w0 = +svg.dataset.w0;
+    const clear = () => { layer.innerHTML = ""; hide(); };
+    week.addEventListener("pointerleave", clear);
+    week.addEventListener("pointermove", e => {
+      const rect = svg.getBoundingClientRect();      // the 74px curve band only
+      if (e.clientY < rect.top || e.clientY > rect.bottom) { clear(); return; }
+      const ctm = svg.getScreenCTM(); if (!ctm) { return; }
+      const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+      const loc = p.matrixTransform(ctm.inverse());
+      const x = Math.max(0, Math.min(W, loc.x));
+      const t = new Date(w0 + (x / W) * weekMs);
+      const h = calGeom.interp(t);
+      const y = 4 + (1 - (h - calGeom.gMin) / (calGeom.gMax - calGeom.gMin)) * (H - 8);
+      layer.innerHTML =
+        `<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${H}" stroke="#2D555F" stroke-width="1" opacity="0.5" vector-effect="non-scaling-stroke"/>` +
+        `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.6" fill="#2D555F" vector-effect="non-scaling-stroke"/>`;
+      tip.textContent = t.toLocaleDateString(undefined,{weekday:"short", month:"short", day:"numeric"}) +
+        "  ·  " + fmtTimeShort(t) + "  ·  " + fmtHeight(h) + " " + unitLabel();
+      tip.style.display = "block";
+      tip.style.left = (e.clientX + 12) + "px";
+      tip.style.top = (rect.top - 30) + "px";
+    });
+  });
 }
 
 /* Sun icon in a 21x18 box: a disc with eight rays, plus an arrow that points up for
@@ -2374,6 +2494,20 @@ function chartSVG(series, hilo, day0, totalDays, sun) {
       <text x="${x}" y="${padT-7}" text-anchor="middle" font-size="10" fill="#a23b2f" font-weight="700">now</text>`;
   }
 
+  // Stash the geometry so the live scrubber (wired after render) can map a pointer
+  // x back to a time and interpolate the height there, off the same sampled curve.
+  const scrubInterp = t => {
+    const P = pts;
+    if (!P.length) return 0;
+    if (t <= P[0].time) return P[0].height;
+    if (t >= P[P.length-1].time) return P[P.length-1].height;
+    let i = 0; while (i < P.length-1 && P[i+1].time < t) i++;
+    const a = P[i], b = P[i+1];
+    return a.height + (b.height - a.height) * ((t - a.time) / (b.time - a.time));
+  };
+  chartGeom = { t0: day0.getTime(), totalMs: totalDays*86400000, multiday: totalDays > 1, navDay: true,
+    padL, padR, padT, padB, W, H, yOf, interp: scrubInterp };
+
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Tide curve">
     <defs>
       <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
@@ -2385,6 +2519,8 @@ function chartSVG(series, hilo, day0, totalDays, sun) {
     <path d="${area}" fill="url(#fill)"/>
     <path d="${line}" fill="none" stroke="#2D555F" stroke-width="${detailed?2.5:2}" stroke-linejoin="round" stroke-linecap="round"/>
     ${sunmarks}${marks}${nowline}
+    <rect class="scrubcatch" x="${padL}" y="${padT}" width="${(W-padL-padR).toFixed(1)}" height="${(H-padT-padB).toFixed(1)}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
+    <g class="scrublayer" style="pointer-events:none"></g>
   </svg>`;
 }
 
@@ -2412,7 +2548,7 @@ function tideTable(hilo, day0, sun) {
         else if (s && s.polar === "day") sunTxt = ` <span style="font-weight:400;color:var(--label)">· ${sunIcon("none",14)} up all day</span>`;
         else if (s && s.polar === "night") sunTxt = ` <span style="font-weight:400;color:var(--label)">· down all day</span>`;
       }
-      rows += `<tr class="dayrow"><td colspan="3">${h.time.toLocaleDateString(undefined,{weekday:"long", month:"short", day:"numeric"})}${sunTxt}</td></tr>`;
+      rows += `<tr class="dayrow" data-date="${ymd(h.time)}" title="Double-click to open this day"><td colspan="3">${h.time.toLocaleDateString(undefined,{weekday:"long", month:"short", day:"numeric"})}${sunTxt}</td></tr>`;
       lastDay = dayKey;
     }
     rows += `<tr>
@@ -2640,6 +2776,7 @@ async function renderInundation() {
   const [begin, end] = rangeBounds();
   const content = document.getElementById("content");
   content.innerHTML = '<div class="status">Computing water levels…</div>';
+  inundGeom = null;   // only the curve (<= 7 days) sets this; bars leave it null
 
   let info = null;
   try { info = state.info = await provider.getStationInfo(st.id); } catch (e) { /* sun optional */ }
@@ -2700,6 +2837,8 @@ async function renderInundation() {
     </div>`;
   const cb = document.getElementById("csvBtn");
   if (cb) cb.onclick = exportInundCSV;
+  const ichart = document.querySelector("#content .chart");
+  if (ichart && inundGeom) attachScrub(ichart, inundGeom);   // curve view only
   const nw = document.getElementById("nightWeight");
   if (nw) nw.onchange = () => {
     const v = parseFloat(nw.value);
@@ -2769,6 +2908,19 @@ function inundCurve(series, thr, res, st, info, begin, nDays) {
   const thrLine = `<line x1="${padL}" y1="${ty}" x2="${W-padR}" y2="${ty}" stroke="#1668B8" stroke-width="1.6" stroke-dasharray="6 3"/>
     <text x="${W-padR-4}" y="${(+ty-6)}" text-anchor="end" font-size="11" font-weight="700" fill="#1668B8">${thr.toFixed(state.units==="metric"?2:1)} ${unitLabel()}</text>`;
 
+  // Interpolate the sampled level series so the scrubber can read the water
+  // level at any instant, and stash the geometry for it (no day navigation here).
+  const inundInterp = t => {
+    const tm = t.getTime(), n = times.length;
+    if (tm <= times[0].getTime()) return vals[0];
+    if (tm >= times[n-1].getTime()) return vals[n-1];
+    let i = 0; while (i < n-1 && times[i+1].getTime() < tm) i++;
+    const a = times[i].getTime(), b = times[i+1].getTime();
+    return vals[i] + (vals[i+1] - vals[i]) * ((tm - a) / (b - a));
+  };
+  inundGeom = { t0, totalMs, multiday: nDays > 1, navDay: false,
+    padL, padR, padT, padB, W, H, yOf, interp: inundInterp };
+
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Water level against threshold">
     <defs><linearGradient id="ifill" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#82A08C" stop-opacity="0.30"/><stop offset="1" stop-color="#82A08C" stop-opacity="0.03"/>
@@ -2777,6 +2929,8 @@ function inundCurve(series, thr, res, st, info, begin, nDays) {
     <path d="${area}" fill="url(#ifill)"/>
     <path d="${line}" fill="none" stroke="#2D555F" stroke-width="1.8" stroke-linejoin="round"/>
     ${thrLine}
+    <rect class="scrubcatch" x="${padL}" y="${padT}" width="${(W-padL-padR).toFixed(1)}" height="${(H-padT-padB).toFixed(1)}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
+    <g class="scrublayer" style="pointer-events:none"></g>
   </svg>`;
 }
 
@@ -3043,6 +3197,7 @@ function dailyMinLevel(day, interp) {
 
 function paintCalendar(hilo, gridStart, info) {
   const interp = makeInterp(hilo);
+  calGeom = { interp, gMin: 0, gMax: 1 };   // gMin/gMax filled in once the shared scale is known
   const month = state.month.getMonth();
   const today = startOfToday();
 
@@ -3052,6 +3207,7 @@ function paintCalendar(hilo, gridStart, info) {
   if (gMax - gMin < 0.5) gMax = gMin + 0.5;
   const pad = (gMax - gMin) * 0.12;
   gMin -= pad; gMax += pad;
+  calGeom.gMin = gMin; calGeom.gMax = gMax;   // shared scale the week curves are drawn on
 
   const dows = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
     .map(d => `<div class="caldow">${d}</div>`).join("");
@@ -3084,16 +3240,14 @@ function paintCalendar(hilo, gridStart, info) {
        </div>
        <div class="calnote">Continuous tide curve across each week, with every high and low labeled.
          <b class="k-hi">Highs in amber</b>, lows lighter, and <b class="k-neg">negative lows in blue</b> below the dashed zero line (the best fieldwork windows).
-         Moon discs mark the four principal phases. Tap a day for detail.</div>
+         Moon discs mark the four principal phases. Double-click a day to open it.</div>
      </div>`;
 
-  document.querySelectorAll(".calcell").forEach(c => c.onclick = () => {
+  document.querySelectorAll(".calcell").forEach(c => c.ondblclick = () => {
     const s = c.dataset.date;
-    state.date = new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8));
-    state.view = "day"; state.days = 1;
-    localStorage.setItem("tide.view","day"); localStorage.setItem("tide.days","1");
-    render();
+    goToDay(new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8)));
   });
+  attachCalendarScrub();
 }
 
 // One continuous curve spanning a full week (7 days), drawn as a single SVG
@@ -3162,7 +3316,7 @@ function weekCurve(weekStart, hilo, interp, gMin, gMax, info) {
     todayBand = `<rect x="${x.toFixed(1)}" y="0" width="${(xe-x).toFixed(1)}" height="${H}" fill="#BE7828" opacity="0.06"/>`;
   }
 
-  return `<svg class="calcurve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+  return `<svg class="calcurve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true" data-w0="${w0.getTime()}">
     <defs>
       <linearGradient id="calfill" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#82A08C" stop-opacity="0.34"/>
@@ -3173,6 +3327,7 @@ function weekCurve(weekStart, hilo, interp, gMin, gMax, info) {
     <path d="${area}" fill="url(#calfill)"/>
     <path d="${line}" fill="none" stroke="#2D555F" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
     ${dots}
+    <g class="wkscrub"></g>
   </svg>`;
 }
 
@@ -3535,7 +3690,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !aboutModa
    fixed at render time. On a window left open all day that card would go on naming a
    tide that has already passed. Re-render just that block on a timer: the predictions
    themselves never change, so nothing is refetched and nothing else on the page moves. */
-let lastDayView = null;
+let lastDayView = null, chartGeom = null, inundGeom = null, calGeom = null;
 setInterval(() => {
   if (state.view !== "day" || !lastDayView) return;
   const host = document.getElementById("tideCards");
