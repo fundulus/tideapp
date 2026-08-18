@@ -2604,20 +2604,17 @@ async function fetchLevelSeries(st, begin, end, units) {
     }
     return { times, vals };
   }
-  const url = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter" +
-    "?product=predictions&application=DrewTideApp&datum=MLLW&time_zone=lst_ldt&format=json" +
-    "&units=" + units + "&station=" + encodeURIComponent(st.id) +
-    "&begin_date=" + ymd(begin) + "&end_date=" + ymd(end);
-  const r = await fetch(url);
-  const j = await r.json();
-  if (j.error) throw new Error(j.error.message || "No predictions for this range.");
-  for (const p of (j.predictions || [])) {
-    const [dp, tp] = p.t.split(" ");
-    const [Y, M, D] = dp.split("-").map(Number);
-    const [h, mi] = tp.split(":").map(Number);
-    times.push(new Date(Y, M - 1, D, h, mi));
-    vals.push(parseFloat(p.v));
-  }
+  // Go through the provider rather than calling NOAA here. This view used to fetch
+  // the 6-minute series itself, which meant it never learned the two things the
+  // provider already knows. NOAA publishes no continuous series for a subordinate
+  // station, only its highs and lows, and answers a series request for one with an
+  // error; the provider fills that case in with the same half cosine the day chart
+  // draws. And when NOAA cannot be reached at all, the provider falls back to the
+  // embedded constants. Asking directly meant inundation was simply unavailable for
+  // every subordinate station, and offline for every station, while the day view of
+  // the very same site worked.
+  const r = await provider.getPredictions(st.id, ymd(begin), ymd(end), units, { series: true });
+  for (const p of (r.series || [])) { times.push(p.time); vals.push(p.height); }
   if (!times.length) throw new Error("No predictions returned for this range.");
   return { times, vals };
 }
