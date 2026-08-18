@@ -17,6 +17,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <style>
   :root {
+    /* How far the page must hold off the top of the window. Zero everywhere except
+       inside the macOS shell, which sets it below. */
+    --titlebar-inset: 0px;
     --teal: #2D555F;
     --teal-dark: #1f3d45;
     --sage: #82A08C;
@@ -431,17 +434,27 @@
   html { -webkit-text-size-adjust: 100%; }
   body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
   header.appbar {
-    padding-top: calc(14px + env(safe-area-inset-top));
+    padding-top: calc(14px + env(safe-area-inset-top) + var(--titlebar-inset));
     padding-left: calc(18px + env(safe-area-inset-left));
     padding-right: calc(18px + env(safe-area-inset-right));
   }
   @media (max-width: 660px) {
     header.appbar {
-      padding-top: calc(12px + env(safe-area-inset-top));
+      padding-top: calc(12px + env(safe-area-inset-top) + var(--titlebar-inset));
       padding-left: calc(14px + env(safe-area-inset-left));
       padding-right: calc(14px + env(safe-area-inset-right));
     }
   }
+
+  /* The macOS shell gives its window a full-size content view, so the page runs right
+     up under the titlebar and the traffic-light buttons land on top of the masthead.
+     Inset the bar by the titlebar's height and the buttons come to rest on the teal
+     instead, which is the same trick as the iOS safe area directly above. This value
+     is a sensible default for a first frame with no measurement; the shell measures
+     the real titlebar and overrides it, including down to zero in full screen, where
+     there is no titlebar at all. Nothing but that shell sets data-shell, so the web
+     and iOS builds never see this. */
+  :root[data-shell="mac"] { --titlebar-inset: 28px; }
   main {
     padding-left: calc(18px + env(safe-area-inset-left));
     padding-right: calc(18px + env(safe-area-inset-right));
@@ -452,7 +465,7 @@
   header.appbar, .seg, .nextcard, .calcell, .datenav, .controlbar, .elevbox {
     -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   }
-  .modalwrap { padding-top: calc(40px + env(safe-area-inset-top)); }
+  .modalwrap { padding-top: calc(40px + env(safe-area-inset-top) + var(--titlebar-inset)); }
 
   .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
   .empty .big { font-size: 42px; margin-bottom: 8px; }

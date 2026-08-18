@@ -163,6 +163,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         config.websiteDataStore = .default()          // keeps localStorage: favourites, units, elevation
         config.userContentController.addScriptMessageHandler(
             locator, contentWorld: .page, name: "locate")
+        // The window below uses a full-size content view, which runs the page up under
+        // the titlebar and drops the traffic-light buttons on top of the masthead. The
+        // page insets itself when it knows it is us. Marked at document start so the
+        // first frame is already correct, rather than visibly reflowing once measured.
+        config.userContentController.addUserScript(WKUserScript(
+            source: "document.documentElement.setAttribute('data-shell','mac');",
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
@@ -173,7 +180,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             contentRect: NSRect(x: 0, y: 0, width: 1180, height: 900),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
-        window.title = "Tides"
+        window.title = "Tides"                  // still the name in Window and Mission Control
+        window.titleVisibility = .hidden        // but not drawn across the masthead
         window.titlebarAppearsTransparent = true
         // Match the page background so the window never flashes a different colour
         // while the web view is coming up. Do NOT make the web view transparent to
@@ -187,12 +195,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.center()
         window.makeKeyAndOrderFront(nil)
 
+        for event in [NSWindow.didEnterFullScreenNotification,
+                      NSWindow.didExitFullScreenNotification,
+                      NSWindow.didResizeNotification] {
+            NotificationCenter.default.addObserver(forName: event, object: window,
+                                                   queue: .main) { [weak self] _ in
+                self?.syncTitlebarInset()
+            }
+        }
+
         buildMenu()
         webView.load(URLRequest(url: URL(string: appOrigin)!))
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    /// Tells the page how far to hold off the top of the window. Under a full-size
+    /// content view the content layout rect is the part of the window below the
+    /// titlebar, so the shortfall against the frame is the titlebar itself. This is
+    /// measured rather than assumed: it costs nothing, it does not go stale if Apple
+    /// changes the height, and it falls out to zero in full screen, where the titlebar
+    /// is gone and a hardcoded inset would leave a band of dead teal behind.
+    private func syncTitlebarInset() {
+        guard let window, let webView else { return }
+        let inset = max(0, window.frame.height - window.contentLayoutRect.height)
+        webView.evaluateJavaScript(
+            "document.documentElement.style.setProperty('--titlebar-inset','"
+            + String(Int(inset.rounded())) + "px')")
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        syncTitlebarInset()
+    }
 
     // MARK: Navigation policy
 
