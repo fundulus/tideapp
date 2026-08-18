@@ -15,6 +15,7 @@
 
 import UIKit
 import WebKit
+import CoreLocation
 
 private let appScheme = "tides"
 private let appOrigin = "tides://app/"
@@ -50,12 +51,77 @@ final class BundleSchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
 }
 
+// MARK: - Location
+
+/// Answers the page's request for a position, from CoreLocation.
+///
+/// WKWebView does not hand `navigator.geolocation` to a third-party app, so in the shell
+/// that API never resolves and the nearest-station button simply spins until it times
+/// out. Rather than fight that, the page asks the shell directly and the shell replies.
+/// The page keeps using the browser's own API everywhere else, so the web build is
+/// untouched.
+///
+/// This is the same bridge the Mac shell uses, under the same message name, because the
+/// page cannot tell the two apart and should not have to. The app also has to declare
+/// NSLocationWhenInUseUsageDescription, which build.sh writes into the Info.plist.
+final class LocationBridge: NSObject, CLLocationManagerDelegate, WKScriptMessageHandlerWithReply {
+    private let manager = CLLocationManager()
+    private var pending: [(Any?, String?) -> Void] = []
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        // A tide station, not a doorstep. Coarse accuracy answers faster, spares the
+        // battery, and is plenty to pick the nearest of 3,500 stations.
+        manager.desiredAccuracy = kCLLocationAccuracyKilometer
+    }
+
+    func userContentController(_ ucc: WKUserContentController,
+                               didReceive message: WKScriptMessage,
+                               replyHandler: @escaping (Any?, String?) -> Void) {
+        pending.append(replyHandler)
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()   // prompt; picked up by the delegate below
+        case .denied, .restricted:
+            finish(error: "Location is off for this app. Turn it on in Settings, "
+                        + "Privacy & Security, Location Services.")
+        default:
+            manager.requestLocation()
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ m: CLLocationManager) {
+        switch m.authorizationStatus {
+        case .notDetermined: break
+        case .denied, .restricted: finish(error: "Location permission was declined.")
+        default: if !pending.isEmpty { m.requestLocation() }
+        }
+    }
+
+    func locationManager(_ m: CLLocationManager, didUpdateLocations locs: [CLLocation]) {
+        guard let c = locs.last?.coordinate else { finish(error: "No position available."); return }
+        let handlers = pending; pending = []
+        handlers.forEach { $0(["lat": c.latitude, "lng": c.longitude], nil) }
+    }
+
+    func locationManager(_ m: CLLocationManager, didFailWithError error: Error) {
+        finish(error: error.localizedDescription)
+    }
+
+    private func finish(error: String) {
+        let handlers = pending; pending = []
+        handlers.forEach { $0(nil, error) }
+    }
+}
+
 // MARK: - Root view controller
 
 final class TidesViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
 
     private var webView: WKWebView!
     private var pendingDownloads: [WKDownload: URL] = [:]
+    private let locator = LocationBridge()
 
     // The app header is dark teal and sits under the status bar, so the clock and
     // indicators need to be light to stay legible.
@@ -68,6 +134,8 @@ final class TidesViewController: UIViewController, WKNavigationDelegate, WKUIDel
         config.setURLSchemeHandler(BundleSchemeHandler(), forURLScheme: appScheme)
         config.websiteDataStore = .default()      // keeps favourites, units, elevation
         config.allowsInlineMediaPlayback = true
+        config.userContentController.addScriptMessageHandler(
+            locator, contentWorld: .page, name: "locate")
 
         webView = WKWebView(frame: view.bounds, configuration: config)
         webView.navigationDelegate = self
