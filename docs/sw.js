@@ -1,4 +1,4 @@
-// Service worker: makes Tides installable and usable offline.
+// Service worker: makes Fundulus Tides installable and usable offline.
 //
 // The offline story is the point of this file. The four Baja sites compute entirely
 // in-page from embedded harmonic constants, so once the shell is cached they work
@@ -8,7 +8,7 @@
 //
 // Bump CACHE_VERSION on every deploy; the old caches are dropped on activate.
 
-const CACHE_VERSION = "tides-20260818121646";
+const CACHE_VERSION = "tides-20260818121941";
 const SHELL_CACHE = CACHE_VERSION + "-shell";
 const DATA_CACHE = CACHE_VERSION + "-noaa";
 

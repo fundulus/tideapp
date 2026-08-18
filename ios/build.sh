@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Builds Tides.app for the iOS Simulator and optionally installs and launches it.
+# Builds the app for the iOS Simulator and optionally installs and launches it.
 #
 # Same philosophy as the macOS build: one Swift file compiled straight into a bundle,
 # no Xcode project to maintain. A real .xcodeproj only becomes necessary for putting
@@ -11,8 +11,11 @@
 set -e
 cd "$(dirname "$0")"
 
-APP="Tides.app"
-NAME="Tides"
+APP="Fundulus Tides.app"
+NAME="Fundulus Tides"                  # what people see on the home screen
+EXEC="Tides"                           # the binary inside; short and space-free
+# Unchanged by the rename, for the same reason as the Mac build: the bundle id is
+# what saved favourites and offline stations hang off.
 BUNDLE_ID="com.drewtalley.tides"
 VERSION="1.0"
 WEB="../index.html"
@@ -34,9 +37,9 @@ for arch in arm64 x86_64; do
     -target ${arch}-apple-ios${MIN_IOS}-simulator \
     -sdk "$SDK" \
     -framework UIKit -framework WebKit \
-    -o "build/${NAME}-${arch}" Sources/main.swift
+    -o "build/${EXEC}-${arch}" Sources/main.swift
 done
-lipo -create -output "$APP/$NAME" "build/${NAME}-arm64" "build/${NAME}-x86_64"
+lipo -create -output "$APP/$EXEC" "build/${EXEC}-arm64" "build/${EXEC}-x86_64"
 
 echo "==> bundling web app"
 cp "$WEB" "$APP/index.html"
@@ -53,7 +56,7 @@ cat > "$APP/Info.plist" <<PLIST
 <dict>
   <key>CFBundleName</key><string>$NAME</string>
   <key>CFBundleDisplayName</key><string>$NAME</string>
-  <key>CFBundleExecutable</key><string>$NAME</string>
+  <key>CFBundleExecutable</key><string>$EXEC</string>
   <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
@@ -87,7 +90,7 @@ cat > "$APP/Info.plist" <<PLIST
     <string>AppIcon29x29</string>
   </array>
   <key>NSLocationWhenInUseUsageDescription</key>
-  <string>Tides uses your location only to find the nearest tide station. It is never stored or sent anywhere.</string>
+  <string>Fundulus Tides uses your location only to find the nearest tide station. It is never stored or sent anywhere.</string>
 </dict>
 </plist>
 PLIST

@@ -1,4 +1,4 @@
-# Tides
+# Fundulus Tides
 
 Tide predictions for US coastal stations and four Baja California sites, with sunrise
 and sunset, moon phase, and an inundation calculator for how long a given shore

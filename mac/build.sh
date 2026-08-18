@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Builds Tides.app from Sources/main.swift plus the web app one directory up.
+# Builds Fundulus Tides.app from Sources/main.swift plus the web app one directory up.
 #
 # No Xcode project: a single-file Swift app assembled straight into a bundle keeps
 # the whole port readable and reproducible. Xcode's command line tools do the work,
@@ -10,8 +10,13 @@
 set -e
 cd "$(dirname "$0")"
 
-APP="Tides.app"
-NAME="Tides"
+APP="Fundulus Tides.app"
+NAME="Fundulus Tides"                  # what people see: Finder, Dock, menu bar
+EXEC="Tides"                           # the binary inside; short and space-free
+# Deliberately unchanged by the rename. macOS keys the WebKit data store off the
+# bundle id, so a new one would orphan every saved favourite, offline station, unit
+# and elevation, reset the Location Services grant, and stop existing copies
+# updating in place. Nobody ever sees it.
 BUNDLE_ID="com.drewtalley.tides"
 VERSION="1.0"
 WEB="../index.html"
@@ -27,9 +32,9 @@ for arch in arm64 x86_64; do
   swiftc -O -whole-module-optimization \
     -target ${arch}-apple-macos12.0 \
     -framework Cocoa -framework WebKit -framework UniformTypeIdentifiers \
-    -o "build/${NAME}-${arch}" Sources/main.swift
+    -o "build/${EXEC}-${arch}" Sources/main.swift
 done
-lipo -create -output "$APP/Contents/MacOS/$NAME" "build/${NAME}-arm64" "build/${NAME}-x86_64"
+lipo -create -output "$APP/Contents/MacOS/$EXEC" "build/${EXEC}-arm64" "build/${EXEC}-x86_64"
 
 echo "==> bundling web app"
 cp "$WEB" "$APP/Contents/Resources/index.html"
@@ -43,7 +48,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <dict>
   <key>CFBundleName</key><string>$NAME</string>
   <key>CFBundleDisplayName</key><string>$NAME</string>
-  <key>CFBundleExecutable</key><string>$NAME</string>
+  <key>CFBundleExecutable</key><string>$EXEC</string>
   <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>

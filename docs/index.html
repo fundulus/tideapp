@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Tides</title>
+<title>Fundulus Tides</title>
 <!-- Progressive web app: lets Windows, Android and ChromeOS install this as a real
      app with offline support. Harmless in the native macOS and iOS shells, which
      load the page over a custom scheme where none of it applies. -->
@@ -64,6 +64,9 @@
   .brand { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; flex: 0 0 auto; }
   .brandline { display: flex; align-items: baseline; gap: 10px; }
   .brand h1 { font-size: 20px; font-weight: 800; letter-spacing: .5px; margin: 0; }
+  /* The genus is the fish's name, so it is given the fish's colour and a lighter
+     weight: present, but not competing with TIDES for the eye. */
+  .brand h1 .genus { font-weight: 500; color: #cfe0dd; }
   .brand .sub { font-size: 12px; color: #cfe0dd; font-weight: 400; }
 
   /* A California killifish, kept small and low-contrast on purpose: a quiet maker's
@@ -487,7 +490,7 @@
 <header class="appbar">
   <div class="brand">
     <div class="brandline">
-      <h1>TIDES</h1>
+      <h1><span class="genus">FUNDULUS</span> TIDES</h1>
       <svg class="fishmark" viewBox="0 0 200 78.7" aria-hidden="true" focusable="false"><use href="#fishmark"/></svg>
     </div>
     <!-- Deliberately not "NOAA predictions". Four stations are not NOAA's at all, any

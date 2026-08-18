@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Signs, notarizes and staples Tides.app so it opens cleanly on other people's Macs.
+# Signs, notarizes and staples the app so it opens cleanly on other people's Macs.
 #
 # WHY THIS IS SEPARATE FROM build.sh
 # build.sh ad-hoc signs, which is fine on the machine that compiled it and nowhere
@@ -22,7 +22,10 @@
 set -e
 cd "$(dirname "$0")"
 
-APP="Tides.app"
+APP="Fundulus Tides.app"
+# No space in what gets sent: the .app carries the display name, the archive around
+# it travels through mail and downloads more cleanly without one.
+ZIP="FundulusTides.zip"
 PROFILE="tides-notary"
 SIGN_ONLY=0
 [[ "$1" == "--sign-only" ]] && SIGN_ONLY=1
@@ -60,9 +63,9 @@ if [[ $SIGN_ONLY -eq 1 ]]; then
 fi
 
 echo "==> submitting to Apple for notarization (usually 1-5 min)"
-rm -f Tides.zip
-ditto -c -k --keepParent "$APP" Tides.zip
-if ! xcrun notarytool submit Tides.zip --keychain-profile "$PROFILE" --wait; then
+rm -f "$ZIP"
+ditto -c -k --keepParent "$APP" "$ZIP"
+if ! xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait; then
   echo
   echo "Notarization failed. To see exactly what Apple objected to:"
   echo "  xcrun notarytool history --keychain-profile $PROFILE"
@@ -75,10 +78,10 @@ xcrun stapler staple "$APP"
 xcrun stapler validate "$APP"
 
 echo "==> repackaging the stapled app"
-rm -f Tides.zip
-ditto -c -k --keepParent "$APP" Tides.zip
+rm -f "$ZIP"
+ditto -c -k --keepParent "$APP" "$ZIP"
 
 echo
-echo "==> done. Tides.zip is ready to send."
+echo "==> done. $ZIP is ready to send."
 echo "    Verify it will pass Gatekeeper on someone else's Mac:"
-echo "      spctl -a -vvv -t install $APP"
+echo "      spctl -a -vvv -t install '$APP'"

@@ -1,4 +1,4 @@
-// Tides for iOS: the same single-file web app, hosted in a WKWebView.
+// Fundulus Tides for iOS: the same single-file web app, hosted in a WKWebView.
 //
 // Shares the macOS shell's core decision: the page is served over a registered
 // `tides://` scheme rather than file://, because a file:// page gets an opaque origin
@@ -155,7 +155,7 @@ final class TidesViewController: UIViewController, WKNavigationDelegate, WKUIDel
     }
 
     private func showError(_ message: String) {
-        let a = UIAlertController(title: "Tides", message: message, preferredStyle: .alert)
+        let a = UIAlertController(title: "Fundulus Tides", message: message, preferredStyle: .alert)
         a.addAction(UIAlertAction(title: "OK", style: .default))
         present(a, animated: true)
     }

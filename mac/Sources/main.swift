@@ -1,4 +1,4 @@
-// Tides: native macOS shell around the single-file web app.
+// Fundulus Tides: native macOS shell around the single-file web app.
 //
 // The web app is unchanged and unaware it is being hosted: it is served to a
 // WKWebView through a custom URL scheme rather than loaded from file://, because a
@@ -180,7 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             contentRect: NSRect(x: 0, y: 0, width: 1180, height: 900),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
-        window.title = "Tides"                  // still the name in Window and Mission Control
+        window.title = "Fundulus Tides"         // still the name in Window and Mission Control
         window.titleVisibility = .hidden        // but not drawn across the masthead
         window.titlebarAppearsTransparent = true
         // Match the page background so the window never flashes a different colour
@@ -190,7 +190,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.backgroundColor = NSColor(red: 0.973, green: 0.973, blue: 0.961, alpha: 1) // #F8F8F5
         window.minSize = NSSize(width: 420, height: 560)
         window.contentView = webView
-        window.setFrameAutosaveName("TidesMainWindow")     // remembers size and position
+        window.setFrameAutosaveName("TidesMainWindow")     // remembers size and position;
+                                                           // unchanged so the rename does not forget it
         if window.frame.width < 420 { window.setContentSize(NSSize(width: 1180, height: 900)) }
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -284,14 +285,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "About Tides", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "About Fundulus Tides", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Hide Tides", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Hide Fundulus Tides", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         hideOthers.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit Tides", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit Fundulus Tides", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         main.addItem(appItem)
 

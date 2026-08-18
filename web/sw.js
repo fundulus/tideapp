@@ -1,4 +1,4 @@
-// Service worker: makes Tides installable and usable offline.
+// Service worker: makes Fundulus Tides installable and usable offline.
 //
 // The offline story is the point of this file. The four Baja sites compute entirely
 // in-page from embedded harmonic constants, so once the shell is cached they work

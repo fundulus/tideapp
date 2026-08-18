@@ -11,17 +11,19 @@ set -e
 cd "$(dirname "$0")"
 
 ID="${1:?usage: finish-notarize.sh <submission-id> [output-name]}"
-OUT="${2:-Tides-notarized-$(date +%Y%m%d-%H%M).zip}"
+OUT="${2:-FundulusTides-notarized-$(date +%Y%m%d-%H%M).zip}"
 PROFILE="tides-notary"
+APP="Fundulus Tides.app"
+ZIP="FundulusTides.zip"
 
-if [[ ! -d Tides.app ]]; then
-  echo "!! Tides.app is missing. It must be the exact build that was submitted."
+if [[ ! -d "$APP" ]]; then
+  echo "!! $APP is missing. It must be the exact build that was submitted."
   exit 1
 fi
 
 # The ticket is issued for a specific code directory hash, so refuse to staple onto
 # a build that is not the one Apple looked at.
-echo "==> app CDHash: $(codesign -dvvv Tides.app 2>&1 | awk -F= '/^CDHash/{print $2}')"
+echo "==> app CDHash: $(codesign -dvvv "$APP" 2>&1 | awk -F= '/^CDHash/{print $2}')"
 
 echo "==> waiting on submission $ID"
 while :; do
@@ -39,15 +41,15 @@ while :; do
 done
 
 echo "==> stapling"
-xcrun stapler staple Tides.app
-xcrun stapler validate Tides.app
+xcrun stapler staple "$APP"
+xcrun stapler validate "$APP"
 
 echo "==> Gatekeeper, as a stranger's Mac would see it"
-spctl -a -vvv -t install Tides.app
+spctl -a -vvv -t install "$APP"
 
 echo "==> packaging"
 mkdir -p dist
 rm -f "dist/$OUT"
-ditto -c -k --keepParent Tides.app "dist/$OUT"
-ditto -c -k --keepParent Tides.app Tides.zip
+ditto -c -k --keepParent "$APP" "dist/$OUT"
+ditto -c -k --keepParent "$APP" "$ZIP"
 echo "==> done: mac/dist/$OUT"
