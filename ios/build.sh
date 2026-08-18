@@ -36,6 +36,7 @@ for arch in arm64 x86_64; do
   swiftc -O \
     -target ${arch}-apple-ios${MIN_IOS}-simulator \
     -sdk "$SDK" \
+    -Xclang-linker -isysroot -Xclang-linker "$SDK" \
     -framework UIKit -framework WebKit \
     -o "build/${EXEC}-${arch}" Sources/main.swift
 done
