@@ -2386,8 +2386,7 @@ function nextTideCard(hilo, day0, series) {
   const rangeLabel = state.days > 1 ? "Range over " + state.days + " days" : "Range this day";
   const rangeBody = `
       <div class="big range">${spread ? spread + " " + unitLabel() : "–"}</div>
-      <div class="small">${lo?fmtHeight(lo.height):"–"} → ${hi?fmtHeight(hi.height):"–"} ${unitLabel()}<br>
-        lowest ${lo?fmtTime(lo.time):""} · highest ${hi?fmtTime(hi.time):""}</div>`;
+      <div class="small">${lo?fmtHeight(lo.height):"–"} → ${hi?fmtHeight(hi.height):"–"} ${unitLabel()}</div>`;
 
   let hero, rangeCard = "";
   if (next) {
@@ -2402,17 +2401,11 @@ function nextTideCard(hilo, day0, series) {
   } else {
     hero = `<div class="nextcard hero"><div class="lab">${rangeLabel}</div>${rangeBody}</div>`;
   }
-  // Per-event summary cards only in single-day view (multi-day would be too many).
-  let cells = "";
-  if (state.days === 1) {
-    cells = hilo.map(h => `
-      <div class="nextcard">
-        <div class="lab"><span class="pill ${h.type==="H"?"high":"low"}">${h.type==="H"?"High":"Low"}</span></div>
-        <div class="big">${fmtTime(h.time)}</div>
-        <div class="small">${fmtHeight(h.height)} ${unitLabel()}</div>
-      </div>`).join("");
-  }
-  return '<div class="card"><div class="nextgrid">' + hero + cells + rangeCard + "</div></div>";
+  // Deliberately no per-event cards here. They repeated the table under the chart
+  // event for event and field for field, which was merely wasteful on a wide Mac
+  // window and became most of a phone screen. What is left is what the table cannot
+  // say: which event is next and how long until it, and the day's spread.
+  return '<div class="card"><div class="nextgrid">' + hero + rangeCard + "</div></div>";
 }
 
 function chartSVG(series, hilo, day0, totalDays, sun) {
