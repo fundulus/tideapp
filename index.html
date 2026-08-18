@@ -20,6 +20,8 @@
     /* How far the page must hold off the top of the window. Zero everywhere except
        inside the macOS shell, which sets it below. */
     --titlebar-inset: 0px;
+    /* Pantone 137 C, in its published sRGB. The fish is the only thing that wears it. */
+    --fundulus: #FFA300;
     --teal: #2D555F;
     --teal-dark: #1f3d45;
     --sage: #82A08C;
@@ -64,17 +66,19 @@
   .brand { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; flex: 0 0 auto; }
   .brandline { display: flex; align-items: baseline; gap: 10px; }
   .brand h1 { font-size: 20px; font-weight: 800; letter-spacing: .5px; margin: 0; }
-  /* The genus is the fish's name, so it is given the fish's colour and a lighter
-     weight: present, but not competing with TIDES for the eye. */
+  /* The genus takes the subtitle's tone and a lighter weight: present, but not
+     competing with TIDES for the eye. It is deliberately not the fish's yellow, which
+     would put three colours across one short line. */
   .brand h1 .genus { font-weight: 500; color: #cfe0dd; }
   .brand .sub { font-size: 12px; color: #cfe0dd; font-weight: 400; }
 
-  /* A California killifish, kept small and low-contrast on purpose: a quiet maker's
-     mark, not a logo. Both width and height are set explicitly because height:auto on
-     an <svg> is unreliable in WebKit, which is the engine behind both native shells. */
-  .fishmark { opacity: .5; }
-  .brand .fishmark { width: 26px; height: 10.2px; color: #cfe0dd; flex: 0 0 auto; align-self: center; }
-  .modal h2 .fishmark { width: 21px; height: 8.3px; color: var(--sage); margin-left: 9px; vertical-align: middle; opacity: .7; }
+  /* A California killifish, kept small: a maker's mark, not a logo. It is drawn at
+     full strength rather than faded, because a specified Pantone that has been
+     composited down against the teal is no longer that Pantone. Both width and height
+     are set explicitly because height:auto on an <svg> is unreliable in WebKit, which
+     is the engine behind both native shells. */
+  .brand .fishmark { width: 26px; height: 10.2px; color: var(--fundulus); flex: 0 0 auto; align-self: center; }
+  .modal h2 .fishmark { width: 21px; height: 8.3px; color: var(--fundulus); margin-left: 9px; vertical-align: middle; }
 
   /* Map picker. The basemap is a coarse world coastline carried in the page, so this
      works with no network; the station dots supply all the local detail anyway. */
