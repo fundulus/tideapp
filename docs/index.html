@@ -3067,6 +3067,9 @@ function inundMonthly(res) {
 }
 
 function inundTable(res) {
+  // A single day's row is exactly what the cards above already say, field for field,
+  // the same way a single month is what the day table is for. Say it once.
+  if (res.perDay.length < 2) return "";
   const sub = state.focus !== "exp";
   const noun = sub ? "Inundated" : "Exposed";
   const other = sub ? "Exposed" : "Inundated";
