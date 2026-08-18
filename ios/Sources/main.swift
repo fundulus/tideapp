@@ -155,6 +155,34 @@ final class TidesViewController: UIViewController, WKNavigationDelegate, WKUIDel
         webView.load(URLRequest(url: URL(string: appOrigin)!))
     }
 
+    /// Tells the page how far the status bar and notch push it down.
+    ///
+    /// The page would normally read this from env(safe-area-inset-top), and does in any
+    /// browser. Inside the shell that value has been seen to collapse to zero after the
+    /// search field is used and the page re-renders, which drops the masthead under the
+    /// clock until the next reload. UIKit's own safeAreaInsets does not have that
+    /// problem, so the shell measures and pushes it on every layout pass.
+    private func syncSafeArea() {
+        guard let webView else { return }
+        let top = Int(view.safeAreaInsets.top.rounded())
+        webView.evaluateJavaScript(
+            "document.documentElement.style.setProperty('--safe-top','" + String(top) + "px')")
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        syncSafeArea()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        syncSafeArea()
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        syncSafeArea()
+    }
+
     // MARK: Navigation policy
 
     func webView(_ webView: WKWebView,

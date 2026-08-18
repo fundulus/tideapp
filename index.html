@@ -22,6 +22,13 @@
     --titlebar-inset: 0px;
     /* Pantone 137 C, in its published sRGB. The fish is the only thing that wears it. */
     --fundulus: #FFA300;
+    /* How far down the status bar and notch push the page. env() is right in a
+       browser, but WebKit recomputes it across keyboard transitions and has been seen
+       to leave it at zero after the search field is used and the page re-renders,
+       dropping the masthead under the clock. The iOS shell therefore measures the real
+       inset with UIKit and overrides this, the same arrangement the Mac shell uses for
+       its titlebar. env() remains the answer everywhere no shell is present. */
+    --safe-top: env(safe-area-inset-top);
     --teal: #2D555F;
     --teal-dark: #1f3d45;
     --sage: #82A08C;
@@ -441,13 +448,13 @@
   html { -webkit-text-size-adjust: 100%; }
   body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
   header.appbar {
-    padding-top: calc(14px + env(safe-area-inset-top) + var(--titlebar-inset));
+    padding-top: calc(14px + var(--safe-top) + var(--titlebar-inset));
     padding-left: calc(18px + env(safe-area-inset-left));
     padding-right: calc(18px + env(safe-area-inset-right));
   }
   @media (max-width: 660px) {
     header.appbar {
-      padding-top: calc(12px + env(safe-area-inset-top) + var(--titlebar-inset));
+      padding-top: calc(12px + var(--safe-top) + var(--titlebar-inset));
       padding-left: calc(14px + env(safe-area-inset-left));
       padding-right: calc(14px + env(safe-area-inset-right));
     }
@@ -472,7 +479,7 @@
   header.appbar, .seg, .nextcard, .calcell, .datenav, .controlbar, .elevbox {
     -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   }
-  .modalwrap { padding-top: calc(40px + env(safe-area-inset-top) + var(--titlebar-inset)); }
+  .modalwrap { padding-top: calc(40px + var(--safe-top) + var(--titlebar-inset)); }
 
   .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
   .empty .big { font-size: 42px; margin-bottom: 8px; }
