@@ -8,12 +8,36 @@ The whole application is one self-contained HTML file. Every platform build is a
 shell around it, so there is exactly one copy of the app and the platforms cannot
 drift apart.
 
+## Installing it
+
+The app is published at **https://fundulus.github.io/tideapp/** and installs from
+there on every platform, with no app store and nothing to download. Open the link and:
+
+| Platform | How |
+|---|---|
+| Windows, Edge or Chrome | Click the install icon at the right of the address bar, or ⋯ → Apps → Install this site as an app |
+| iPhone, iPad | **Safari only**: Share → Add to Home Screen. Chrome on iOS cannot do this |
+| Android, Chrome | ⋮ → Install app |
+| macOS, Chrome or Edge | Install icon in the address bar. In Safari: File → Add to Dock |
+
+Open it once while online so the service worker can cache the shell. After that it
+launches without a connection, and the four Mexican sites and five San Diego sites
+below give real predictions with no network at all.
+
+Install from the address above with its trailing slash. The manifest uses a relative
+`start_url` and `scope`, so installing from a deeper path scopes the app oddly.
+
+A signed and notarized macOS build lives in `mac/dist/` if you would rather have a
+real application than an installed page. There is no distributable iOS build: Apple
+allows installation only through TestFlight or the App Store, and `ios/build.sh`
+targets the Simulator.
+
 ## Running it
 
 | Target | Command | Notes |
 |---|---|---|
 | Web / PWA | `cd web && ./build.sh serve` | Assembles `docs/`, serves at `localhost:8888` |
-| macOS | `cd mac && ./build.sh run` | 404 KB universal app, no Xcode project |
+| macOS | `cd mac && ./build.sh run` | 856 KB universal app, no Xcode project |
 | iOS Simulator | `cd ios && ./build.sh run` | Boots a simulator, installs, launches |
 
 `docs/` is generated and published by GitHub Pages. Do not edit it by hand; edit
